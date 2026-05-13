@@ -127,6 +127,48 @@ else if (FParse::Value(*CurrentSwitch, TEXT("MAP="), Maps)) { ... bExplicitPacka
 
 **F5 status: VERIFIED + RESOLVED in v1.2 docs.**
 
+---
+
+## B6. Live output streaming + `--clean` semantics — PASS (with F6)
+
+Designed to demonstrate live UI: drove `.build editor --clean` in background + `Monitor` tail with line-buffered grep for progress markers. Each filtered line streamed to the conversation as a real-time event.
+
+**Finding F6 (skill defect — wrong "Produces" semantic): `--clean` is clean-only, not clean+rebuild.**
+
+The skill's `commands.md` `.build clean editor` entry said *"Clean+rebuild the editor"*. Empirical evidence from this run:
+- Command: `.build editor --clean --nosummary`.
+- ushell drove `Build.bat ProjectGearEditor ... Win64 development -Clean -Progress <nul`.
+- UBT executed only the clean step: `Cleaning ProjectGearEditor binaries...` → exit 0.
+- 60-line log, no `[N/M]` actions, no `Result: Succeeded` — just clean and stop.
+- After this run the project's `Binaries/Win64/UnrealEditor-*.dll` files were gone (had to run `.build editor` again to restore — that rebuild took 120s for 46 actions).
+
+UBT's `-Clean` flag is clean-only; ushell's `--clean` flag and `.build clean <X>` sub-verb both pass it through unchanged. The skill's framing as "clean+rebuild" is wrong.
+
+**F6 fix applied in v1.3** (commits on `feat/v1.3-streaming-and-clean`):
+- `commands.md` shared `_BuildCmd` options block: corrected `--clean` to *"Clean only ... despite the name suggesting 'clean THEN build'"*.
+- `commands.md` `.build clean editor` entry: header changed to *"Clean only the editor (NOT clean+rebuild)"*; describes the canonical "chain them" pattern `.build clean editor && .build editor`.
+
+**B6 also added Mode A / Mode B streaming docs** to `reference/invocation.md` so future agents and users can see ushell output in real time — full working code blocks for both modes plus rationale.
+
+---
+
+## Summary of all battle-test findings
+
+| # | Sev | Finding | Fixed in |
+|---|---|---|---|
+| F1 | Minor | `--nosummary` rejected by `.info`/`.run`/`.cook`/etc. | v1.2 |
+| F2 | Minor | `.info projects` leaks `OSError` on non-branch projects | v1.2 |
+| F3 | Cosmetic | Engine "Program targets not supported" noise on installed engines | v1.2 |
+| F4 | Cosmetic | Boot-time vs command-time wording for context-missing | v1.2 |
+| F5 | **MAJOR** | `-PackageDir=` doesn't restrict ResavePackages — correct flag is `-PackageFolder=<filesystem-path>` | v1.2 |
+| F6 | Major | `--clean` is clean-only (not clean+rebuild) | v1.3 |
+
+Plus deliverables:
+- v1.2: 7 reference files patched; `tests/battle-test-projectgear.md` capturing findings.
+- v1.3: Mode A + Mode B live-output streaming patterns documented in `reference/invocation.md` with verified working code.
+
+**Synthetic GREEN corpus: 13/13 still passes. Real-world coverage: substantially higher.**
+
 **Operational damage:**
 - 1500+ Engine packages had their on-disk format bumped 1004 → 1018. UE 5.7's editor accepts both versions, so the engine install should still work. Will continue to monitor.
 - No project files modified (git clean).
