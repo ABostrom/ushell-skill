@@ -151,3 +151,31 @@ If the check is unclear, re-run the precondition.
 ## Zen ↔ UAT relationship
 
 `.zen *` commands talk to the standalone **ZenServer** process and the cloud/fileshare snapshot index. They are **not** a substitute for `.stage`. Staging still goes through UAT `BuildCookRun`, but `style=zen` (or `style=auto` driven by `Saved/Cooked/<form>/ue.projectstore`) tells UAT to package as a Zen oplog rather than pak/utoc. `.zen snapshot get` is the fast path for *"pull a pre-cooked dataset for this CL"* — it launches ZenServer if needed and imports the oplog. Always check `.zen status` before assuming Zen is running.
+
+## Load reference when…
+
+- Need flag/option detail on a ushell command → `reference/commands.md`
+- Need a multi-step plan / DAG for a goal → `reference/workflows.md`
+- Authoring a new ushell command/channel → `reference/channel-authoring.md`
+- Spawning ushell yourself from a script/Bash/PS → `reference/invocation.md`
+- A command failed or behaves oddly → `reference/troubleshooting.md`
+- Shaping what UE itself does once launched (boot mode, map, `#Portal` spawn selector, trace channels, `-ExecCmds`, LLM/memory tracking, etc.) → `reference/unreal-args.md`
+- Driving UAT directly — `BuildCookRun` recipes, `BuildPlugin`, `RunUnreal` for tests, full ProjectParams flag groups, CI-friendly invocations, packaging/signing — → `reference/uat.md`
+- Authoring or invoking a BuildGraph script (schema, tasks, `-script=`, `-target=`, `-set:`, idiomatic pipelines) → `reference/buildgraph.md`
+
+## Anti-patterns
+
+- **Don't call `RunUAT.bat`, `UnrealBuildTool.exe`, `GenerateProjectFiles.bat`, `Build.bat`, or raw `p4` when ushell is present.** Use `.uat`, `.build`, `.sln generate`, `.p4 *` instead.
+- **Don't invent UE switches.** Common hallucinations to watch for:
+  - `?StartPoint=<Name>` or `?PlayerStartTag=<Name>` — **does not exist as a UE switch**. The spawn selector is the URL `#Portal` segment: `<MapName>#<PortalTag>`. The tag must match an `APlayerStart`'s `PlayerStartTag` property. (Resolved by `AGameModeBase::FindPlayerStart_Implementation`.) See `reference/unreal-args.md` §2.
+  - `-encrypt` — use `-encryptinifiles` plus `-signpak`/`-signpakid=` and `-cryptokeys=<keychain.json>`.
+  - `-RunAutomationTest=` under BCR — fragile (client exits before UAT polls, reports BUILD FAILED on green tests). Use `.uat RunUnreal -- -test=UE.TargetAutomation -RunTest="<filter>"` (Gauntlet) or `.run editor -- -ExecCmds="Automation RunTests <filter>; Quit" -ReportExportPath=<dir>` instead.
+  - `.engine <path>`, `.platform list` — invented ushell verbs that don't exist. The full canonical list is in `reference/commands.md`. Use `.info` to inspect engine + platforms.
+- **Don't invent ushell commands.** If `.foo` isn't in the Quick Reference or `commands.md`, it doesn't exist.
+- **Don't pipe `-Foo="path with spaces"` through plain subprocess argv when extending ushell** — use `unreal.cmdline.read_ueified()`. UE's quoting differs from POSIX/Windows shells; plain argv will mangle it.
+- **Don't set `FLOW_SID` yourself**, and don't invoke `_build`/`_cook`/`_uat`/`_run`/`_p4` (those are ushell's internal subprocess shims, not user-facing).
+- **Don't `cd` inside a `cmd /d /k ushell.bat` chain** — PWD is unset deliberately by ushell.
+- **Don't use `.cook --iterate` for shipping builds** (community-confirmed stale-asset bugs). Iterative cook is for dev only; always full `-cook` for release.
+- **Don't trust Project Settings → Packaging → StagingDirectory under UAT** — it's ignored. Always pass `-stagingdirectory=` and `-archive -archivedirectory=` on the CLI.
+- **Channel authoring: `describe.flow.py`, not `__init__.py`.** Channels live under lowercase `channels/<name>/` and declare themselves via `flow.describe.Channel()` + `flow.describe.Command().source().invoke()` in `describe.flow.py`. See `reference/channel-authoring.md`.
+- **Manual P4 bisect is wasted effort.** `.p4 bisect <good> <bad> -- <script>` exists; the script returns `0` (good), `80` (bad), or `90` (failed to build). See `commands.md` `.p4 bisect`.
