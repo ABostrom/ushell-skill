@@ -15,11 +15,8 @@ docs/superpowers/specs/
   2026-05-13-ushell-skill-design.md    The design spec (start here)
   research-notes-uat.md                Digest of UAT/BuildGraph research
 
-ue5-launch-with-spawn-point.md         Seed content for reference/unreal-args.md §2
-                                       (FURL map URL grammar + PlayerStart Portal)
-
-SKILL.md                               (TBD) Always-loaded skill body
-reference/                             (TBD) Layered on-demand reference files:
+SKILL.md                               Always-loaded skill body
+reference/                             Layered on-demand reference files:
   commands.md                          per-command pages (all ~60 verbs)
   invocation.md                        driving ushell non-interactively
   workflows.md                         goal-first DAG catalogue
