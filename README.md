@@ -6,6 +6,17 @@ When the skill is loaded, Claude reasons backward from your stated goal (*"get m
 
 **Status:** v2.0 — installable via Claude Code's plugin manager. 13/13 GREEN scenarios pass on first dispatch.
 
+**Compatibility:**
+
+| UE version | Status |
+|---|---|
+| 5.7 | ✅ Tested against (the 13 GREEN scenarios all ran here) |
+| 5.6 | 🟡 Expected to work; file an issue if you hit drift |
+| 5.0 – 5.5 | ⚠️ Unverified; older ushell has fewer verbs |
+| 5.8+ | ⏳ Will be tested when the engine ships; next minor |
+
+Full policy and drift-handling rules: [`docs/versioning.md`](docs/versioning.md).
+
 ---
 
 ## Install
