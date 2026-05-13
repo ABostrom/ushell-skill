@@ -173,7 +173,7 @@ If you've found a new failure mode worth testing, append a new scenario to `test
 
 ## License
 
-[Add license here]
+MIT — see [`LICENSE`](LICENSE).
 
 ---
 

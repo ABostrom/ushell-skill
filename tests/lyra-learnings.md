@@ -271,7 +271,9 @@ public class DeployToEpicGameStore : BuildCommand
 
 ## Triage — what should land in the skill
 
-### MUST (high value, low cost — land in v1.4)
+**Status (2026-05-13):** v1.4 has landed all MUST + SHOULD items below. NICE items remain backlog.
+
+### ✅ MUST (landed in v1.4)
 
 1. **Document `BuildAndTestProject.xml`** in `buildgraph.md` as the canonical project-test scaffold. Include the caveat: **source-build engine only**. Show the `<Include Script="..."/>` + `<Property Name="WithBATDefaults" Value="false"/>` + append-to-`$(BuildAndTestExtendedRequirements)` + final `<Aggregate Name="BuildAndTestExtended <X>">` pattern.
 2. **Add `<Strip>` task** to `buildgraph.md` §4 built-in tasks reference. Plus `<ForEach>` and `<Do If="...">` blocks.
