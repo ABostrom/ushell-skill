@@ -36,6 +36,13 @@ ushell's `.uat` is the wrapper; UAT is the underlying tool. This file covers UAT
 - Injects `-ScriptsForProject=<project name>` unless `--allscripts`.
 - Sets `DOTNET_CLI_TELEMETRY_OPTOUT=1`.
 
+**Key top-level flags worth knowing:**
+
+- **`-compile`** — instructs UAT to compile its script `.csproj` files before running. Use whenever you've changed a `MyProject.Automation.csproj` or one of its dependencies. Lyra's `RunLocalPackage.bat` passes this. Through ushell, append after the `--`: `.uat BuildCookRun -- ... -compile`.
+- **`-nocompile`** / **`-nocompileeditor`** — skip the UAT-script-compile and editor-binary-build steps respectively. Used by CI to opt out when binaries are already current.
+- **`-ScriptDir=<path>`** — extra directory to scan for `*.Automation.csproj` (in addition to the auto-discovered ones). For project-side scripts that aren't picked up via the standard `<project>/Build/Scripts/` layout.
+- **`-NoP4`** — disable all Perforce integration for this run. Standard for git/CI projects.
+
 ---
 
 ## 2. BuildCookRun — the workhorse
@@ -393,9 +400,31 @@ RunUAT RunUnreal -test=<TestName>[(K=V,K=V)] [-test=<More>,...] \
 
 ### 4.3 Important test nodes
 
+**Automation framework drivers:**
 - **`UE.EditorAutomation`** — in-editor `FAutomationTestBase` tests; `-RunTest=<filter>` selects.
 - **`UE.TargetAutomation`** — cooked-target automation; editor hosts, target runs.
 - **`UE.BootTest` / `EditorBootTest` / `TargetBootTest`** — boot-to-front-end + clean exit.
+
+**Cook test matrix** (in `Engine/Source/Programs/AutomationTool/Gauntlet/Unreal/Automation/UE.CookByTheBook.cs` and siblings). Lyra's `LyraTests.xml` wires all of these as conditional `<Option>`s — useful for CI cook regressions:
+
+- **`UE.CookOnTheFly(Map=<M>)`** — boots COTF server, client requests assets on demand.
+- **`UE.CookByTheBook(Map=<M>)`** — standard ahead-of-time cook.
+- **`UE.FastCookByTheBook(Map=<M>)`** — `-fastcook` variant.
+- **`UE.ColdCookByTheBook(Map=<M>)`** — clean cook (no cached intermediates).
+- **`UE.CookByTheBookCacheSettings(Map=<M>)`** — runs with mutated Data Cache settings.
+- **`UE.UnversionedCookByTheBook(Map=<M>)`** — `-unversioned` variant.
+- **`UE.IterativeCookByTheBook`** — `-iterate` variant; no map required (validates the iterate machinery).
+- **`UE.InterruptedCookByTheBook`** — intentional interruption + resume.
+- **`UE.CookSinglePackageByTheBook(Map=<M>, WorldPartitionMap)`** — `-cooksinglepackagenorefs` for one map; second token marks it as WP if applicable.
+- **`UE.IncrementalCookByTheBook(Map=<M>)`** — incremental cook validation.
+
+Use these from BuildGraph by appending to `$(DefaultTargetTestList)`:
+
+```xml
+<Property Name="DefaultTargetTestList"
+          Value="$(DefaultTargetTestList)+UE.CookByTheBook(Map=L_Expanse)"
+          If="$(RunCookByTheBookTest)" />
+```
 
 ### 4.4 Report output
 
@@ -629,3 +658,201 @@ Epic's official documentation (URLs valid as of 2025-05):
 - `dev.epicgames.com/documentation/en-us/unreal-engine/unreal-automation-tool-for-unreal-engine`
 - `dev.epicgames.com/documentation/en-us/unreal-engine/buildgraph-for-unreal-engine`
 - `dev.epicgames.com/documentation/en-us/unreal-engine/gauntlet-automation-framework-in-unreal-engine`
+
+---
+
+## 10. Authoring custom UAT commands (the Lyra pattern)
+
+UAT auto-discovers `*.Automation.csproj` files anywhere in the engine tree (and in project-side `Build/Scripts/` directories when `-ScriptsForProject=` is set). Building such a csproj produces a DLL UAT loads; any `BuildCommand` subclass in that DLL becomes a runnable UAT command.
+
+### 10.1 The `<Project>.Automation.csproj` template
+
+From `Samples/Games/Lyra/Build/Scripts/Lyra.Automation.csproj`:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>   <!-- check engine version -->
+    <OutputType>Library</OutputType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+    <Configurations>Debug;Release;Development</Configurations>
+    <RootNamespace>MyProject.Automation</RootNamespace>
+    <AssemblyName>MyProject.Automation</AssemblyName>
+    <!-- Drop the DLL where UAT scans on startup: -->
+    <OutputPath>..\..\..\..\..\Binaries\DotNET\AutomationTool\AutomationScripts\MyProject</OutputPath>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningsNotAsErrors>612,618</WarningsNotAsErrors>  <!-- allow obsolete/deprecated warnings -->
+    <DebugType>pdbonly</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\Engine\Source\Programs\AutomationTool\AutomationUtils\AutomationUtils.Automation.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Engine\Source\Programs\AutomationTool\Localization\Localization.Automation.csproj" />
+    <!-- Localization providers (pick what you use): XLoc, Crowdin, Smartling, OneSky -->
+    <ProjectReference Include="..\..\..\..\..\Engine\Source\Programs\AutomationTool\XLocLocalization\XLocLocalization.Automation.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Engine\Source\Programs\AutomationTool\CrowdinLocalization\CrowdinLocalization.Automation.csproj" />
+    <!-- Core engine APIs -->
+    <ProjectReference Include="..\..\..\..\..\Engine\Source\Programs\Shared\EpicGames.Core\EpicGames.Core.csproj" PrivateAssets="All">
+      <Private>false</Private>
+    </ProjectReference>
+    <!-- Gauntlet (if you write custom tests) -->
+    <ProjectReference Include="..\..\..\..\..\Engine\Source\Programs\AutomationTool\Gauntlet\Gauntlet.Automation.csproj" PrivateAssets="All">
+      <Private>false</Private>
+    </ProjectReference>
+    <!-- UBT (if you need to drive UBT directly from your command) -->
+    <ProjectReference Include="..\..\..\..\..\Engine\Source\Programs\UnrealBuildTool\UnrealBuildTool.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+The five back-references `..\..\..\..\..` walk from `<engine>/Samples/Games/<Project>/Build/Scripts/` up to the engine root. Adjust depth for your project layout.
+
+`TreatWarningsAsErrors=true` with `WarningsNotAsErrors=612,618` is Epic's convention — fail on everything except obsolete/deprecated-API warnings (those happen during engine version upgrades and would block builds otherwise).
+
+### 10.2 Writing a `BuildCommand` subclass
+
+Real-world example from Lyra (`LyraTest.ContentValidation.cs` — 320-line BuildCommand, abbreviated):
+
+```csharp
+using System;
+using AutomationTool;
+using EpicGame;
+using EpicGames.Core;
+
+namespace MyProject.Automation
+{
+    [Help("One-line summary; appears in `RunUAT MyContentCheck -help` output.")]
+    [Help("CL=<value>", "Description of -CL= parameter.")]
+    [Help("opened", "Description of -opened boolean flag.")]
+    [Help("MaxPackagesToLoad=<value>", "Description of -MaxPackagesToLoad= parameter.")]
+    public class MyContentCheck : BuildCommand
+    {
+        public override void ExecuteBuild()
+        {
+            // Parse args
+            bool CheckOpened = ParseParam("opened");                          // boolean flag
+            string MaxPkgs   = ParseParamValue("MaxPackagesToLoad", "2000");  // valued; default "2000"
+            string CL        = ParseParamValue("CL");                          // valued; null if absent
+
+            if (string.IsNullOrEmpty(CL) && !CheckOpened)
+                throw new AutomationException("-CL=<num> or -opened must be specified.");
+
+            // Use P4 API if needed
+            if (P4Enabled)
+            {
+                var Files = CommandUtils.P4.Opened("");
+                LogInformation("Found {Count} opened files", Files.Count());
+                // P4Env.Client / .User / .ServerAndPort / .Changelist available
+            }
+
+            // Invoke an editor commandlet
+            string EditorExe = HostPlatform.Current.GetUnrealExePath("UnrealEditor.exe");
+            CommandUtils.RunCommandlet(
+                new FileReference(@"D:\Work\MyProject\MyProject.uproject"),
+                EditorExe,
+                "ContentValidationCommandlet",                       // commandlet name
+                $"-MaxPackagesToLoad={MaxPkgs} -SCCProvider=Perforce"  // commandlet args
+            );
+
+            // Exit code: throw AutomationException for failure; return normally for success.
+        }
+    }
+}
+```
+
+**Key API surface for BuildCommand subclasses:**
+
+| API | Purpose |
+|---|---|
+| `[Help("summary")]` / `[Help("name=value", "desc")]` | Documentation. Surfaces in `-help`. |
+| `ParseParam(string name)` | Boolean flag presence check. |
+| `ParseParamValue(string name, string defaultValue = null)` | Valued arg. |
+| `CommandUtils.P4.*` | P4 wrapper: `.Changes()`, `.Describe()`, `.Files()`, `.Opened()`, `.GetAuthenticationToken()`, etc. |
+| `P4Env.Client` / `.User` / `.ServerAndPort` / `.Changelist` / `.Branch` | P4 env-derived info. |
+| `CommandUtils.RunCommandlet(uproject, editorExe, commandletName, args)` | **Spin up the editor, run a commandlet, harvest the result.** This is the canonical "from a UAT command, drive an editor commandlet" call. |
+| `HostPlatform.Current.GetUnrealExePath("UnrealEditor.exe")` | Resolve the host's editor binary path. |
+| `LogInformation` / `LogWarning` / `LogError` | Structured logging. |
+| `AutomationException(string)` / `AutomationException(ExitCode, ...)` | The right exception type for command failures. |
+| `CommandUtils.CombinePaths(...)` / `CmdEnv.LocalRoot` / `FileExists_NoExceptions` | Filesystem utilities. |
+
+Then invoke through ushell: `.uat MyContentCheck -- -opened -MaxPackagesToLoad=500`.
+
+### 10.3 Authoring Gauntlet test classes
+
+Custom Gauntlet tests = `EpicGameTestNode<ConfigClass>` subclass + `EpicGameTestConfig` subclass. From Lyra (`LyraTest.BootTest.cs` + `LyraTest.TestConfig.cs`):
+
+```csharp
+using EpicGame;
+using Gauntlet;
+
+namespace MyProject.Tests
+{
+    public class MyBootTest : EpicGameTestNode<MyTestConfig>
+    {
+        public MyBootTest(UnrealTestContext InContext) : base(InContext) { }
+
+        public override MyTestConfig GetConfiguration()
+        {
+            MyTestConfig Config = base.GetConfiguration();
+            Config.NoMCP = true;                         // disable Epic Online Services
+            UnrealTestRole Client = Config.RequireRole(UnrealTargetRole.Client);
+            Client.Controllers.Add("BootTest");          // wires engine-side UTestController_BootTest
+            return Config;
+        }
+    }
+
+    public class MyTestConfig : EpicGameTestConfig
+    {
+        [AutoParam]                                       // exposed as CLI flag
+        public int TargetNumOfCycledMatches = 2;
+
+        public override void ApplyToConfig(UnrealAppConfig AppConfig,
+                                            UnrealSessionRole ConfigRole,
+                                            IEnumerable<UnrealSessionRole> OtherRoles)
+        {
+            base.ApplyToConfig(AppConfig, ConfigRole, OtherRoles);
+
+            if (AppConfig.ProcessType.IsClient())
+            {
+                AppConfig.CommandLine += $" -TargetNumOfCycledMatches={TargetNumOfCycledMatches}";
+            }
+
+            const float InitTime = 120.0f;
+            const float MatchTime = 300.0f;
+            MaxDuration = InitTime + (MatchTime * TargetNumOfCycledMatches);
+        }
+    }
+}
+```
+
+**The `[AutoParam]` attribute** on a public field/property auto-binds it to a CLI arg of the same name: `.uat RunUnreal -- -test=MyBootTest -TargetNumOfCycledMatches=5` overrides the default.
+
+**Engine-side controller pairing:** `Client.Controllers.Add("BootTest")` references a `UTestController_BootTest` Blueprint/C++ class in the engine. The controller is what *actually runs* the per-step logic inside the game; the Gauntlet test class is the *driver* on the build-machine side.
+
+### 10.4 Multi-storefront target pattern (Lyra-style)
+
+Lyra ships four target variants — `LyraGame`, `LyraGameEOS`, `LyraGameSteam`, `LyraGameSteamEOS` — each a separate `*.Target.cs` enabling different `OnlineSubsystem*` plugins via `bUseEpicOnlineServices` / `bUseSteamSubsystem` / etc.
+
+```csharp
+// MyGameSteam.Target.cs
+public class MyGameSteamTarget : TargetRules
+{
+    public MyGameSteamTarget(TargetInfo Target) : base(Target)
+    {
+        Type = TargetType.Game;
+        DefaultBuildSettings = BuildSettingsVersion.V2;
+        ExtraModuleNames.Add("MyGame");
+        bUseSteamSubsystem = true;       // pick storefront via target flag
+    }
+}
+```
+
+BuildGraph then picks the target via an `<Option>`:
+
+```xml
+<Option Name="TargetName" DefaultValue="MyGame"
+        Restrict="MyGame|MyGameEOS|MyGameSteam|MyGameSteamEOS"
+        Description="Which storefront variant to build" />
+```
+
+…and uses it in BCR: `-target=$(TargetName)`. Same project source, different storefront integrations, parallel CI lanes.

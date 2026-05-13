@@ -774,7 +774,9 @@ Same args as `.stage`. Forces `--build=False --cook=False --deploy=True --style=
 .uat BuildCookRun -- -platform=Win64 -clientconfig=Shipping -build -cook -stage -pak -iostore
 .uat BuildPlugin -- -Plugin=Plugins/MyPlugin.uplugin -Package=D:\Out -TargetPlatforms=Win64+Linux
 .uat BuildGraph -- -script=Build/Pipeline.xml -target=Stage -set:Platform=Win64
+.uat BuildGraph -- -script=Build/Pipeline.xml -target=Stage -UseLocalBuildStorage  # local dev runs
 .uat RunUnreal -- -test=UE.EditorAutomation -RunTest="Filter:Smoke" -build=editor -platform=Win64
+.uat MyContentCheck -- -opened -compile        # custom command; -compile rebuilds UAT scripts first
 .uat BuildCookRun -- -RunAutomationTest="DummySuite.SmokeTest" -unattended -nullrhi    # FRAGILE - prefer RunUnreal
 ```
 

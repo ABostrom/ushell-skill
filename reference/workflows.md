@@ -40,6 +40,8 @@ The **Skip-conditions** block is what lets the planner not redo work. Each check
 12. **Drive a commandlet (`.run commandlet ResavePackages -- -PackageFolder=…`)**
 13. **Run BuildCookRun directly via `.uat`**
 14. **Clean a branch safely (`.p4 clean --dryrun` → `.p4 clean`)**
+15. **PCB-for-UGS: distribute compiled binaries via Perforce + UGS** *(Lyra pattern)*
+16. **PGO two-step build (Profile → Optimize)** *(Lyra pattern)*
 
 ---
 
@@ -516,3 +518,179 @@ Skip-conditions:
 **Default keeps:** `Saved/Profiling`, `Saved/StagedBuilds`. Override with `--savedkeeps=<csv>` (e.g. `--savedkeeps=Profiling,StagedBuilds,Logs`).
 
 **Wipe all of Saved/:** `--allsaved` (use with care).
+
+---
+
+## 15. PCB-for-UGS: distribute compiled binaries to a team via Perforce
+
+This is the canonical pattern from Lyra's `LyraBuild.xml` — produce a zip of engine+project binaries (with symbols stripped into a parallel tree) and submit it to a separate Perforce stream that UnrealGameSync auto-deploys to users.
+
+```
+GOAL: Compiled editor + game binaries distributed to a team via UGS
+
+Terminal: .uat BuildGraph -- -script=Build/MyBuild.xml -target="Submit To Perforce For UGS"
+                            -set:TargetPlatforms=Win64+Linux
+                            -set:PCBSubmitPath=//<depot>/Engine/Build/PCBs/<branch>
+                            -set:Versioned=true
+                            -AllowSubmit -Submit
+  Preconditions:
+    [A] Source-build engine (needed for <SetVersion>, <Strip>, and <Submit>)
+        OR all those tasks ship; with installed engine you get <Submit> but not
+        the <Strip Files= Platform=> path for non-Windows platforms.
+    [B] Perforce stream <PCBSubmitPath> exists, write-permissioned to the build user,
+        and is mapped in this client's view.
+    [C] BuildGraph script declares Compile -> Strip -> Zip -> Submit chain (see below)
+
+Post:
+  • A versioned .zip lands at //<depot>/.../<EscapedBranch>-MyEditor.zip
+  • UGS clients (with this stream in their workspace) pick it up automatically
+    on next P4 sync and unpack into their local engine tree.
+
+Skip-conditions:
+  • [A] - engine source confirmed (E:\<engine>\Engine\Source\ exists)
+  • [B] - p4 stream -o <PCBSubmitPath>  returns a valid stream spec
+  • [C] - script file exists and -validate passes
+```
+
+**The BuildGraph script skeleton** (abbreviated from `LyraBuild.xml`):
+
+```xml
+<BuildGraph>
+  <Option Name="TargetPlatforms" DefaultValue="Win64" />
+  <Option Name="OutputDir" DefaultValue="$(RootDir)\LocalBuilds\Binaries" />
+  <Option Name="Versioned" DefaultValue="$(IsBuildMachine)" />
+  <Option Name="PCBSubmitPath" DefaultValue="" />
+
+  <Agent Name="Submit PCBs" Type="CompileWin64;Win64">
+    <Node Name="Update Version Files">
+      <SetVersion Change="$(Change)" Branch="$(EscapedBranch)" If="$(Versioned)"/>
+    </Node>
+
+    <Node Name="Compile Tools" Requires="Update Version Files" Produces="#ToolBinaries">
+      <Compile Target="UnrealHeaderTool"      Platform="Win64" Configuration="Development" Tag="#ToolBinaries"/>
+      <Compile Target="ShaderCompileWorker"   Platform="Win64" Configuration="Development" Tag="#ToolBinaries"/>
+      <Compile Target="UnrealPak"             Platform="Win64" Configuration="Development" Tag="#ToolBinaries"/>
+      <Compile Target="CrashReportClientEditor" Platform="Win64" Configuration="Shipping" Tag="#ToolBinaries"/>
+      <Compile Target="UnrealInsights"        Platform="Win64" Configuration="Shipping" Tag="#ToolBinaries"/>
+    </Node>
+
+    <Node Name="Compile Editor" Requires="Compile Tools" Produces="#EditorBinaries">
+      <Compile Target="MyEditor" Platform="Win64" Configuration="Development" Tag="#EditorBinaries"/>
+    </Node>
+
+    <ForEach Name="P" Values="$(TargetPlatforms)">
+      <Node Name="Compile Game $(P)" Requires="Compile Tools" Produces="#GameBins_$(P)">
+        <Compile Target="MyGame" Platform="$(P)" Configuration="Development" Tag="#GameBins_$(P)"/>
+        <Compile Target="MyGame" Platform="$(P)" Configuration="Shipping"   Tag="#GameBins_$(P)"/>
+      </Node>
+    </ForEach>
+
+    <Node Name="Submit" Requires="#ToolBinaries;#EditorBinaries">
+      <Property Name="ArchiveDir" Value="$(RootDir)\LocalBuilds\ArchiveForUGS"/>
+      <Delete Files="$(ArchiveDir)\..."/>
+
+      <!-- Partition binaries vs symbols -->
+      <Tag Files="#ToolBinaries;#EditorBinaries" Except=".../Intermediate/..." With="#ArchiveFiles"/>
+      <Tag Files="#ArchiveFiles" Except="*.pdb" With="#ArchiveBinaries"/>
+      <Tag Files="#ArchiveFiles" Filter="*.pdb"  With="#ArchiveSymbols"/>
+
+      <!-- Stage binaries; strip pdbs into a parallel tree -->
+      <Property Name="StagingDir" Value="$(ArchiveDir)\Staging"/>
+      <Copy Files="#ArchiveBinaries" From="$(RootDir)" To="$(StagingDir)"/>
+      <Strip Files="#ArchiveSymbols" BaseDir="$(RootDir)" OutputDir="$(StagingDir)" Platform="Win64"/>
+
+      <!-- Zip + submit -->
+      <Property Name="ZipFile" Value="$(ArchiveDir)\$(EscapedBranch)-MyEditor.zip"/>
+      <Zip FromDir="$(StagingDir)" ZipFile="$(ZipFile)"/>
+      <Submit Description="[CL $(CodeChange)] Updated binaries"
+              Files="$(ZipFile)" FileType="binary+FS32"
+              Workspace="$(COMPUTERNAME)_ArchiveForUGS"
+              Stream="$(PCBSubmitPath)" RootDir="$(ArchiveDir)\Perforce"/>
+    </Node>
+  </Agent>
+</BuildGraph>
+```
+
+**Key bits:** `<SetVersion>` stamps the CL into binaries; `<Strip>` puts pdbs in a parallel tree so distribution stays lean; `FileType="binary+FS32"` is the P4 type for FastFile-32 (UGS understands it); `Workspace=` references a separate "archive-for-UGS" client that the user has dedicated to PCB submissions.
+
+For installed-engine users without source: this pattern partially works (you can `<Compile>` project targets) but most of the engine-side `Compile Tools` won't apply. The skill recommends using `.uat BuildCookRun` directly for installed-engine distribution instead.
+
+---
+
+## 16. PGO (Profile-Guided Optimization) two-step build
+
+From Lyra's `LyraTests.xml`. Two passes: **Profile** (gather perf data from a replay) → **Optimize** (rebuild with PGO data).
+
+```
+GOAL: PGO-optimized Shipping/Test binary for <Platform>
+
+Terminal: .uat BuildGraph -- -script=Build/MyTests.xml -target="MyProject PGO Optimize <Platform>"
+                            -set:TargetConfigurations=Shipping
+                            -set:WithWin64=true
+  Preconditions:
+    [A] Source-build engine (Engine/Build/Graph/Tasks/PGOProfileProject.xml must exist)
+    [B] A representative replay file at <ProjectPath>/Build/Replays/PGO.replay
+    [C] PGO toolchain support in your compiler (MSVC default; check clang on POSIX)
+    [D] First-pass Profile node has run (it's a hard Requires)
+
+Post:
+  • PGO-instrumented + retrained binaries at <project>/Binaries/<Platform>/<Name>.exe
+  • Training data optionally submitted to P4 (via -set:PGOAutoSubmitResults=true)
+```
+
+**Script skeleton:**
+
+```xml
+<BuildGraph>
+  <Property Name="ProjectName" Value="MyProject" />
+  <Property Name="ProjectPath" Value="Samples/Games/MyProject" />
+  <Property Name="TargetName" Value="MyGame" />
+
+  <Include Script="../../../../Engine/Build/Graph/Tasks/PGOProfileProject.xml" />
+
+  <ForEach Name="Platform" Values="$(AllPGOPlatforms)"
+           If="ContainsItem('$(TargetConfigurations)','Test','+')
+            or ContainsItem('$(TargetConfigurations)','Shipping','+')">
+
+    <!-- Profile pass: use a recorded replay to gather PGO training data. -->
+    <Expand Name="BasicReplayPGOProfile"
+            Platform="$(Platform)"
+            Configuration="$(TargetConfigurations)"
+            LocalReplay="$(ProjectPath)/Build/Replays/PGO.replay"
+            LocalStagingDir="$(ProjectPath)/LocalBuilds/PGO/Windows"
+            Build="$(ProjectPath)/Saved/StagedBuilds/Windows"
+            BuildRequires="$(PreNodeName)Stage $(Platform)"
+            CompileArgs="$(GenericCompileArguments)" />
+
+    <!-- Optimize pass: rebuild with the PGO data. -->
+    <Agent Name="PGO Optimize $(Platform)" Type="Win64">
+      <Node Name="$(ProjectName) PGO Optimize $(Platform)"
+            Requires="$(PreNodeName)PGO Profile Replay $(Platform)">
+        <ForEach Name="Cfg" Values="$(TargetConfigurations)" Separator="+">
+          <Compile Target="$(TargetName)" Platform="$(Platform)" Configuration="$(Cfg)"
+                   Arguments="$(PGOOptimizeCompileArgs$(Platform))
+                              -BuildVersion=&quot;$(BuildVersion)&quot;
+                              $(GenericCompileArguments)" />
+        </ForEach>
+      </Node>
+    </Agent>
+  </ForEach>
+</BuildGraph>
+```
+
+**Invocations:**
+
+```
+# Step 1: gather PGO training data + (optionally) submit to P4
+.uat BuildGraph -- -script=Build/MyTests.xml -target="MyProject PGO Profile Replay Win64"
+                  -set:TargetConfigurations=Shipping -set:WithWin64=true
+                  -set:PGOAutoSubmitResults=true
+
+# Step 2: rebuild Shipping with PGO data
+.uat BuildGraph -- -script=Build/MyTests.xml -target="MyProject PGO Optimize Win64"
+                  -set:TargetConfigurations=Shipping -set:WithWin64=true
+```
+
+**Constraints:** PGO is only meaningful for **Test or Shipping** configurations (Development PGO is wasted effort). Requires a representative replay — `.replay` files are captured via the in-engine Demo system (`demorec MyReplay` console command).
+
+**Variable-name interpolation:** `$(PGOOptimizeCompileArgs$(Platform))` is **not a typo** — it's a BuildGraph feature where the property name itself is computed from another property. `$(Platform)` is substituted first, yielding e.g. `$(PGOOptimizeCompileArgsWin64)`, which is then looked up. Advanced and surprising; document if you use this pattern.
