@@ -2,7 +2,7 @@
 
 The same seven prompts from `tests/baseline.md`, re-dispatched to subagents **with the skill loaded**. Each scenario passes only if the agent hits **every** bullet in its GREEN expectation. Score `n/7`; below 7/7 ⇒ REFACTOR.
 
-The skill is "loaded" by including the entire repo at `E:\Work\ushell-skill\` in the subagent's prompt context. Subagents are instructed to read `SKILL.md` first, then load reference files via its "Load reference when…" pointers as needed.
+The skill is "loaded" by including the skill content tree at `E:\Work\ushell-skill\skills\ushell\` in the subagent's prompt context. Subagents are instructed to read `SKILL.md` first, then load reference files via its "Load reference when…" pointers as needed.
 
 ## S1. Build the editor — GREEN expectation
 

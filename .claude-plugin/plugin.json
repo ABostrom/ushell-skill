@@ -1,0 +1,10 @@
+{
+  "name": "ushell",
+  "description": "Drives ushell (Epic's Unreal Engine CLI) end-to-end: build, cook, stage, package, trace, BuildGraph, UAT, goal-directed planning",
+  "version": "2.0.0",
+  "author": { "name": "Aaron Bostrom", "email": "aaron.bostrom1@gmail.com" },
+  "homepage": "https://github.com/ABostrom/ushell-skill",
+  "repository": "https://github.com/ABostrom/ushell-skill",
+  "license": "MIT",
+  "keywords": ["unreal-engine", "ushell", "ue5", "buildgraph", "uat", "epic", "gamedev"]
+}

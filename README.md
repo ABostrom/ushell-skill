@@ -4,25 +4,30 @@ A Claude Code skill for driving [ushell](https://dev.epicgames.com/documentation
 
 When the skill is loaded, Claude reasons backward from your stated goal (*"get me an Insights trace at this CL on PS5"*) to a sequence of ushell commands — checking preconditions, skipping work already done, and stopping cleanly if anything is unreachable. Without it, Claude defaults to raw `RunUAT.bat` / `UnrealBuildTool.exe` / `p4` invocations and sometimes invents non-existent flags.
 
-**Status:** v1.1 — passes 13/13 GREEN scenarios on first dispatch, no REFACTOR cycles needed.
+**Status:** v2.0 — installable via Claude Code's plugin manager. 13/13 GREEN scenarios pass on first dispatch.
 
 ---
 
-## Quick start
+## Install
+
+Inside any Claude Code session:
+
+```
+/plugin marketplace add ABostrom/ushell-skill
+/plugin install ushell@ABostrom-skills
+```
+
+That's it. The skill is now loaded for every Claude Code session on this machine, no symlink, no clone, no PATH.
 
 ```powershell
-# Clone + symlink into Claude Code's skills folder
-git clone https://github.com/ABostrom/ushell-skill C:\Work\ushell-skill
-New-Item -ItemType SymbolicLink `
-    -Path "$env:USERPROFILE\.claude\skills\ushell" `
-    -Target "C:\Work\ushell-skill"
-
 # Open Claude Code in your UE project
 cd E:\Work\MyProject
 claude
 ```
 
 Then ask Claude to build, cook, run, trace, package, bisect, etc. The skill activates whenever the conversation involves Unreal Engine (specifically when prompts mention `.uproject`, `RunUAT`, `BuildCookRun`, `Engine/Extras/ushell`, `p4`, `Insights`, cooking, staging, packaging, plugin building, channel authoring, etc.).
+
+> **Upgrading from v1.x?** Delete the old symlink (`Remove-Item "$env:USERPROFILE\.claude\skills\ushell"`) and reinstall via the `/plugin` commands above. Claude Code's plugin manager now owns updates; the v1.4 tag is preserved if you need to fall back.
 
 Full walkthrough: [`docs/onboarding.md`](docs/onboarding.md).
 
@@ -70,20 +75,25 @@ For the full RED-vs-GREEN gallery: [`docs/before-and-after.md`](docs/before-and-
 
 ```
 .
-├─ SKILL.md                              Always-loaded skill body (~250 words prose + lookup table)
-├─ reference/                            On-demand reference files:
-│  ├─ commands.md                        Per-command pages (78 verb entries with
-│  │                                     Preconditions + Produces fields)
-│  ├─ invocation.md                      Driving ushell non-interactively
-│  ├─ workflows.md                       14 goal-first DAGs (the headline being
-│  │                                     the Insights-trace pipeline)
-│  ├─ channel-authoring.md               Writing new ushell verbs
-│  ├─ troubleshooting.md                 Symptom-keyed diagnostics
-│  ├─ unreal-args.md                     UE's own CLI lexicon — FURL grammar,
-│  │                                     trace channels, -ExecCmds, LLM, etc.
-│  ├─ uat.md                             UAT deep-dive (BuildCookRun, BuildPlugin,
-│  │                                     RunUnreal/Gauntlet, ~45 other scripts)
-│  └─ buildgraph.md                      BuildGraph schema + 30+ tasks + recipes
+├─ .claude-plugin/                       Claude Code plugin manifests
+│  ├─ marketplace.json                   Declares the ABostrom-skills marketplace
+│  └─ plugin.json                        Declares the ushell plugin
+├─ skills/
+│  └─ ushell/                            The skill itself
+│     ├─ SKILL.md                        Always-loaded body (~250 words prose + lookup table)
+│     └─ reference/                      On-demand reference files:
+│        ├─ commands.md                  Per-command pages (78 verb entries with
+│        │                               Preconditions + Produces fields)
+│        ├─ invocation.md                Driving ushell non-interactively
+│        ├─ workflows.md                 14 goal-first DAGs (headlined by
+│        │                               the Insights-trace pipeline)
+│        ├─ channel-authoring.md         Writing new ushell verbs
+│        ├─ troubleshooting.md           Symptom-keyed diagnostics
+│        ├─ unreal-args.md               UE's own CLI lexicon — FURL grammar,
+│        │                               trace channels, -ExecCmds, LLM, etc.
+│        ├─ uat.md                       UAT deep-dive (BuildCookRun, BuildPlugin,
+│        │                               RunUnreal/Gauntlet, ~45 other scripts)
+│        └─ buildgraph.md                BuildGraph schema + 30+ tasks + recipes
 ├─ docs/
 │  ├─ onboarding.md                      New-developer walkthrough
 │  ├─ cookbook.md                        User-facing recipe gallery
@@ -149,8 +159,8 @@ The script prints the verbatim dispatch instructions for an Agent tool call. Run
 2. **[`docs/before-and-after.md`](docs/before-and-after.md)** — concrete RED-vs-GREEN proof from real transcripts.
 3. **[`docs/cookbook.md`](docs/cookbook.md)** — user-facing recipes for common workflows.
 4. **[`docs/how-it-works.md`](docs/how-it-works.md)** — architecture + design philosophy.
-5. **[`SKILL.md`](SKILL.md)** — the always-loaded surface itself.
-6. **`reference/*.md`** — when you have a specific question.
+5. **[`skills/ushell/SKILL.md`](skills/ushell/SKILL.md)** — the always-loaded surface itself.
+6. **`skills/ushell/reference/*.md`** — when you have a specific question.
 
 ---
 
