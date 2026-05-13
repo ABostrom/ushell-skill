@@ -63,3 +63,24 @@ Suppress the `Cmd.summarise` result/time banner with `--nosummary` on commands t
 The active `.uproject` lives in a session noticeboard keyed by `$FLOW_SID`. Every fresh invocation is a new session ID, so always pass `--project=<path>` to `ushell.bat`, or run `.project <path>` as the first command. Do NOT `cd` inside a `cmd /d /k ushell.bat` chain — ushell deliberately unsets `PWD`.
 
 Full details and PowerShell module integration: `reference/invocation.md`.
+
+## Goal-directed planning
+
+When the user states a **goal** (e.g. *"an Insights trace at CL X on PS5"*), do NOT jump to a single command. Walk backwards:
+
+1. **Terminal command** — what command actually produces the goal artifact?
+2. **Preconditions** — what must already exist for it to succeed?
+3. **Recurse** until a precondition is already satisfied (verify with `.info`, file checks, `.zen snapshot list`, etc.).
+4. **Execute forwards**, verifying after each step.
+
+Each `reference/commands.md` entry declares **Preconditions** and **Produces**. `reference/workflows.md` provides full goal-to-plan DAGs. For anything passed after `-- <UE args>` (map URL, `#Portal` spawn selector, `-trace=<channels>`, `-ExecCmds=`, LLM/memory switches, commandlet `-run=<Name>` recipes, etc.), source the actual args from `reference/unreal-args.md` — **do not invent UE switches**.
+
+**Skip-policy:** skip a precondition only when verifiable. Checks that count as verification:
+- A `.target` receipt file exists at `Binaries/<Plat>/<Name>[-<Plat>-<Variant>].target`.
+- `Saved/Cooked/<cook_form>/` exists and is non-empty.
+- `.zen snapshot list <runtime> <platform>` returns a hit at the requested CL.
+- `Engine/Build/Build.version` `Changelist` matches the target CL.
+
+If the check is unclear, re-run the precondition.
+
+**Failure-policy:** if a step fails or a precondition is truly unreachable, **stop, report the verbatim error, suggest the next action, hand back to the user.** No silent fallback to raw tools, no destructive auto-recovery (don't delete `Saved/`, don't edit `.uproject`, don't `p4 reset` without consent).
