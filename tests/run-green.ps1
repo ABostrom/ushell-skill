@@ -43,10 +43,12 @@ param(
 $RepoRoot      = (Resolve-Path "$PSScriptRoot\..").Path
 $BaselineFile  = Join-Path $RepoRoot "tests\baseline.md"
 $WithSkillFile = Join-Path $RepoRoot "tests\with-skill.md"
-$SkillRoot     = $RepoRoot
+$SkillRoot     = Join-Path $RepoRoot "skills\ushell"
+$SkillMd       = Join-Path $SkillRoot "SKILL.md"
 
 if (-not (Test-Path $BaselineFile))  { throw "tests/baseline.md not found at $BaselineFile" }
 if (-not (Test-Path $WithSkillFile)) { throw "tests/with-skill.md not found at $WithSkillFile" }
+if (-not (Test-Path $SkillMd))       { throw "skill content not found at $SkillMd (expected after v2.0 restructure)" }
 
 # Parse scenario blocks out of baseline.md.
 $baselineText = Get-Content $BaselineFile -Raw

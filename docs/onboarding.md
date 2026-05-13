@@ -23,34 +23,28 @@ Optional but recommended:
 
 ## Step 1: Install the skill
 
-The skill is a folder of markdown. Claude Code discovers skills from `~/.claude/skills/<name>/`.
+The skill installs through Claude Code's plugin manager — two slash-commands from inside any Claude Code session:
 
-```powershell
-# Windows — clone the repo and symlink it into Claude Code's skills folder.
-git clone https://github.com/ABostrom/ushell-skill C:\Work\ushell-skill
-New-Item -ItemType Directory -Path "$env:USERPROFILE\.claude\skills" -Force
-# Symlink (preferred — live editing while developing)
-New-Item -ItemType SymbolicLink `
-    -Path "$env:USERPROFILE\.claude\skills\ushell" `
-    -Target "C:\Work\ushell-skill"
-# OR copy (if symlinks need admin):
-Copy-Item -Path C:\Work\ushell-skill\SKILL.md,C:\Work\ushell-skill\reference `
-          -Destination "$env:USERPROFILE\.claude\skills\ushell" -Recurse -Force
+```
+/plugin marketplace add ABostrom/ushell-skill
+/plugin install ushell@ABostrom-skills
 ```
 
-```bash
-# POSIX
-git clone https://github.com/ABostrom/ushell-skill ~/Work/ushell-skill
-mkdir -p ~/.claude/skills
-ln -s ~/Work/ushell-skill ~/.claude/skills/ushell
+The first command registers the marketplace; the second installs the plugin. Both work cross-platform (Windows, macOS, Linux). No clone, no symlink, no PATH munging.
+
+**Verify** the install from inside Claude Code:
+
+```
+/plugin list
 ```
 
-**Verify:**
+`ushell@ABostrom-skills` should appear with version `2.0.0`. You can also just ask Claude *"do you have the ushell skill loaded?"* — if yes, the skill's description should auto-include itself in the answer.
 
-```powershell
-Get-ChildItem "$env:USERPROFILE\.claude\skills\ushell"
-# Expected: SKILL.md  reference/
-```
+> **Upgrading from v1.x?** Delete the old symlink first:
+> ```powershell
+> Remove-Item "$env:USERPROFILE\.claude\skills\ushell"
+> ```
+> Then run the two `/plugin` commands above. The plugin manager takes over update management; future versions arrive via `/plugin update`.
 
 ---
 
@@ -159,13 +153,7 @@ When the skill is engaged, Claude's responses follow a predictable structure:
 4. **Skip-conditions** (which steps to drop if their precondition is already met).
 5. **Failure-policy** (if a step fails, what to surface and what NOT to do — no destructive auto-recovery).
 
-If Claude **doesn't** produce a structured response, the skill isn't engaged. Verify:
-
-```powershell
-Get-ChildItem "$env:USERPROFILE\.claude\skills\ushell\SKILL.md"
-```
-
-If that file isn't there, re-do Step 1. If it IS there but Claude isn't using it, mention "ushell" or "UE project" explicitly in your prompt to trigger the description match.
+If Claude **doesn't** produce a structured response, the skill isn't engaged. Verify with `/plugin list` inside Claude Code — `ushell@ABostrom-skills` should be present. If it is and Claude still isn't using it, mention "ushell" or "UE project" explicitly in your prompt to trigger the description match.
 
 ---
 
@@ -185,7 +173,7 @@ Other common issues:
 | `.cook *` hangs on shader compile | XGE / Zen / DDC waiting | `.zen status`, try `--noxge`, `.kill editor` to unblock |
 | `BuildPlugin` fails on Android/iOS SDK | Since 4.25, BuildPlugin tries every SDK by default | pass `-TargetPlatforms=Win64+...` |
 
-Full symptom-keyed list: [`reference/troubleshooting.md`](../reference/troubleshooting.md).
+Full symptom-keyed list: [`reference/troubleshooting.md`](../skills/ushell/reference/troubleshooting.md).
 
 ---
 
@@ -195,7 +183,7 @@ Three paths:
 
 ### A. Add your own ushell verb (`.mychan <verb>`)
 
-You want a project-specific verb. See [`reference/channel-authoring.md`](../reference/channel-authoring.md) for the full guide; the smallest viable channel is:
+You want a project-specific verb. See [`reference/channel-authoring.md`](../skills/ushell/reference/channel-authoring.md) for the full guide; the smallest viable channel is:
 
 ```
 $USERPROFILE\.ushell\channels\mychan\
@@ -241,12 +229,12 @@ If the gap is general (not project-specific), open a PR against [github.com/ABos
 In order of how often you'll use them:
 
 1. **[`cookbook.md`](cookbook.md)** — recipes for common workflows.
-2. **[`reference/troubleshooting.md`](../reference/troubleshooting.md)** — when something goes wrong.
-3. **[`reference/commands.md`](../reference/commands.md)** — per-verb flag reference.
-4. **[`reference/workflows.md`](../reference/workflows.md)** — goal-first DAGs.
+2. **[`reference/troubleshooting.md`](../skills/ushell/reference/troubleshooting.md)** — when something goes wrong.
+3. **[`reference/commands.md`](../skills/ushell/reference/commands.md)** — per-verb flag reference.
+4. **[`reference/workflows.md`](../skills/ushell/reference/workflows.md)** — goal-first DAGs.
 5. **[`how-it-works.md`](how-it-works.md)** — architecture + design philosophy.
 6. **[`before-and-after.md`](before-and-after.md)** — side-by-side RED vs GREEN proof.
-7. **[`SKILL.md`](../SKILL.md)** — the always-loaded surface itself. Read it cover-to-cover; it's short.
+7. **[`SKILL.md`](../skills/ushell/SKILL.md)** — the always-loaded surface itself. Read it cover-to-cover; it's short.
 
 ---
 

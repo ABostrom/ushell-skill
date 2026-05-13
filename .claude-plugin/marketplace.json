@@ -1,0 +1,14 @@
+{
+  "name": "ABostrom-skills",
+  "description": "Aaron Bostrom's Claude Code skills",
+  "owner": { "name": "Aaron Bostrom", "email": "aaron.bostrom1@gmail.com" },
+  "plugins": [
+    {
+      "name": "ushell",
+      "description": "Drives ushell (Epic's Unreal Engine CLI) end-to-end: build, cook, stage, package, trace, BuildGraph, UAT, goal-directed planning",
+      "version": "2.0.0",
+      "source": "./",
+      "author": { "name": "Aaron Bostrom", "email": "aaron.bostrom1@gmail.com" }
+    }
+  ]
+}
