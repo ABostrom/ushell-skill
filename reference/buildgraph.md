@@ -11,9 +11,12 @@ BuildGraph is UAT's meta-orchestration layer: a directed graph of **Nodes** (seq
 5. Property / macro / include idioms
 6. Case study: CookedEditor
 7. Case study: LiveLinkHub
-8. Idiomatic recipes (8 skeletons)
+8. Idiomatic recipes
 9. ushell ↔ BuildGraph
 10. Gotchas
+11. Built-in BuildGraph properties
+12. Engine-shipped meta-scripts (source-build only)
+13. Extending `BuildAndTestProject.xml` — the Lyra pattern
 
 ---
 
@@ -68,6 +71,10 @@ Through ushell: `.uat BuildGraph -- -script=<path> -target=<Node> [-set:Foo=Bar]
 | `-validate` | Schema-validate only (don't run). |
 | `-export=<json>` | Dump graph to JSON for external tools. |
 | `-preprocessing` | Show preprocessed (macro-expanded) script. |
+| `-UseLocalBuildStorage` | Use local-filesystem path for inter-node artifact storage instead of network/Horde shared storage. **Essential for local-dev BuildGraph runs** — without it, nodes that depend on cross-agent file transfers will fail because there's no shared storage configured. |
+| `-AllowSubmit -Submit` | Required pair to allow `<Submit>` tasks to actually submit to P4. Either flag alone is a no-op defence. |
+| `-set:Horde=true` | Force-enable the `$(Horde)` built-in. Normally inferred from the build environment. |
+| `-WriteToSharedStorage` | Promote stored artifacts to shared storage (for downstream agents to consume). |
 
 ---
 
@@ -92,6 +99,15 @@ All elements support a `If="<expr>"` conditional attribute.
 | `<Annotation Name="..." Value="..."/>` | Metadata for downstream tooling. |  |
 | `<EnvVar Name="..."/>` | Surface env var to tasks. |  |
 | `<Warning Message="..."/>`, `<Error Message="..."/>` | Script-level diagnostics. |  |
+| `<ForEach Name="..." Values="..." Separator="..." If="...">...</ForEach>` | Iterate over a delimited list. `Values` is the source string; `Separator` defaults to `;` (override with e.g. `+`). Each iteration sets `$(Name)` and re-evaluates the body. Used heavily by Lyra for "one node per target platform". | `<ForEach Name="P" Values="$(TargetPlatforms)"><Node Name="Compile $(P)">...</Node></ForEach>` |
+| `<Do If="...">...</Do>` | Block conditional. Wraps multiple elements; the whole block is skipped if `If` is false. Cleaner than putting `If="..."` on every child. | `<Do If="!$(SkipTest)">...</Do>` |
+| `<Switch>` with `<Case If="...">` / `<Default>` | XML if-else. Evaluates each `Case` in order; runs `Default` if none match. | `<Switch><Case If="$(Horde)"><RetrieveArtifact .../></Case><Default><Copy .../></Default></Switch>` |
+
+**Conditional `If="..."` expressions** support:
+- Comparison: `'$(X)' == 'foo'`, `'$(X)' != ''`, numeric `>` / `<` / `>=` / `<=`.
+- Boolean: `And`, `Or`, `!`.
+- Functions: `Exists('<path>')`, `ContainsItem('<list>', '<item>', '<separator>')` — membership test in a delimited list.
+- Built-in properties (see §11) like `$(IsBuildMachine)`, `$(IsPreflight)`, `$(Horde)`.
 
 ---
 
@@ -208,6 +224,47 @@ File tags are how nodes pass artifacts to dependent nodes.
 <CreateCloudArtifact Name="WindowsClient" Files="$(StagedDir)/Win64/..."
                      Type="staged-build" Description="Win64 client Shipping"/>
 ```
+
+#### `<RetrieveArtifact>` — Pull a previously-created Horde artifact
+
+```xml
+<RetrieveArtifact Name="MyProject-Staged-Windows" Type="staged-build"
+                  OutputDir="$(ProjectOutputDirectory)/Windows" />
+```
+
+Used downstream of `<CreateCloudArtifact>` in a Horde job. Lyra wraps this in a `<Switch>` so local builds fall back to a `<Copy>` from `$(NetworkOutputDirectory)`:
+
+```xml
+<Switch>
+    <Case If="$(Horde)">
+        <RetrieveArtifact Name="$(ProjectName)-Staged-$(UploadPlatform)" Type="staged-build"
+                          OutputDir="$(ProjectOutputDirectory)/$(UploadPlatform)" />
+    </Case>
+    <Default>
+        <Copy From="$(NetworkOutputDirectory)/$(UploadPlatform)/Staged/..."
+              To="$(ProjectOutputDirectory)/$(UploadPlatform)/..." />
+    </Default>
+</Switch>
+```
+
+### Binaries / symbols
+
+#### `<Strip>` — Strip pdbs/symbols into a separate output dir
+
+```xml
+<Strip Files="#ArchiveSymbols" BaseDir="$(RootDir)" OutputDir="$(ArchiveStagingDir)"
+       Platform="Win64"/>
+```
+
+Used to separate "binaries for distribution" from "symbols for a symbol server / debug builds". Pair with `<Tag Files="#X" Except="*.pdb" With="#Binaries"/>` + `<Tag Files="#X" Filter="*.pdb" With="#Symbols"/>` to partition. Then `Strip` the symbols into a parallel tree. Common in the PCB-for-UGS workflow (recipe 9).
+
+#### `<SetVersion>` — Stamp `Engine/Build/Build.version`
+
+```xml
+<SetVersion Change="$(Change)" Branch="$(EscapedBranch)" If="$(Versioned)"/>
+```
+
+Writes CL + branch into the engine's `Build.version` JSON so subsequent compiles bake them into binaries. Standard first step in any node that produces versioned binaries for distribution.
 
 ### Cloud / deploy
 
@@ -636,3 +693,104 @@ ushell auto-injects `-project=<uproject>` unless `--unprojected`. No other ushel
 - **Property substitution is text-level.** `$(Property)` is replaced verbatim — beware of paths with spaces or special chars. Use `&quot;` around args that contain spaces.
 - **Conditionals (`If="..."`) are evaluated at preprocess time**, not runtime. `If="Exists('$(Path)')"` is static.
 - **Custom tasks** can be added by declaring `BgTask` subclasses in other UAT modules. The `[TaskElement("Name", typeof(ParamsClass))]` attribute registers them with the schema reader.
+
+---
+
+## 11. Built-in BuildGraph properties
+
+These are available without explicit `<Option>` or `<Property>` declaration. Reading any real script (Lyra, Epic samples, internal CI) requires recognising them.
+
+| Property | Meaning | Set by |
+|---|---|---|
+| `$(IsBuildMachine)` | `true` on CI agents (anything that sets `IsBuildMachine=1` in env, including Horde). `false` locally. Gate logic. | Build env / CI scripts |
+| `$(IsPreflight)` | `true` when `-set:PreflightChange=<cl>` is set (i.e. we're testing a P4 shelve). | Conventionally set in script: `<Property Name="IsPreflight" Value="true" If="'$(PreflightChange)' != ''"/>` |
+| `$(Horde)` | `true` when running under Horde specifically (vs Jenkins / CircleCI / local). Used to gate Horde-specific tasks like `<RetrieveArtifact>`. | Build env |
+| `$(Change)` | Current Perforce CL number (engine-side). | Build env |
+| `$(CodeChange)` | Latest CL that contains code (`.cpp/.h/.cs/.usf/.ush`). Smaller than `$(Change)` if recent CLs are content-only. | Build env |
+| `$(PreflightChange)` | Shelved CL number being tested in preflight mode. Empty otherwise. | CLI: `-set:PreflightChange=<cl>` |
+| `$(Branch)` | Current branch path (P4 stream like `//UE5/Main`). | Build env |
+| `$(EscapedBranch)` | `$(Branch)` with `/` → `+` substituted. Safe for filenames. | Derived |
+| `$(RootDir)` | Workspace root — the engine root in a typical UE checkout. All script paths are resolved relative to this. | Detected at startup |
+| `$(BuildName)` | Derived build version string (e.g. `CL-12345`). | Conventional |
+| `$(BuildNamePath)` | Build version including preflight suffix if applicable (e.g. `CL-12345-PF67890`). Use this for archive directory names. | Derived |
+| `$(NetworkOutputDirectory)` | Shared-storage path for build outputs. Set by `BuildAndTestProject.xml`. | Project script |
+| `$(NetworkTempRootOverride)` / `$(NetworkPublishRootOverride)` / `$(NetworkReportRootOverride)` | Override paths for the temp / publish / report storage roots. | Project script (Lyra-style) |
+| `$(PreNodeName)` | Prefix used by `BuildAndTestProject.xml` for project-namespaced node names. Allows multiple projects in one job. Used in `Requires="$(PreNodeName)Compile Editor Win64"`. | `BuildAndTestProject.xml` |
+| `$(RequiredEditorPlatforms)` | Computed from `$(EditorPlatforms)` option; the set of platforms whose editor we need to build. | `BuildAndTestProject.xml` |
+| `$(TargetPlatforms)` / `$(TargetConfigurations)` / `$(EditorPlatforms)` | Standard option names for the platform/config matrix. Default `Win64` / `Development` / `Win64`. | `<Option>` declarations |
+
+**Empty-default conventions:** scripts often `<Property Name="Foo" Value="$(IsBuildMachine)"/>` to gate by CI mode; or `<Property Name="DefaultX" Value="..."/>` then conditionally clear it inside `<Do If="$(IsBuildMachine)">` so CI users must specify explicitly while locals get defaults.
+
+---
+
+## 12. Engine-shipped meta-scripts (source-build only)
+
+Epic ships several BuildGraph meta-scripts in the engine source tree. They define standard scaffolds, properties, and aggregates that project scripts include and extend. **These are only present in a source-build UE clone (or a Perforce-checked-out engine tree) — installed engines (Epic Games Launcher) DO NOT have them.** Attempting to `<Include Script="..."/>` from an installed-engine layout will fail.
+
+| Path | Provides |
+|---|---|
+| `Engine/Build/Graph/Tasks/BuildAndTestProject.xml` | The canonical project-test scaffold. Declares a `BuildAndTest <ProjectName>` aggregate plus standard nodes (`Compile <ProjectName>Editor Win64`, `Stage <TargetName> <Platform>`, `Publish Staged <Platform>`, etc.), and the built-in properties `$(NetworkOutputDirectory)`, `$(PreNodeName)`, `$(RequiredEditorPlatforms)`. |
+| `Engine/Build/Graph/Tasks/PGOProfileProject.xml` | PGO (Profile-Guided Optimization) macros: `BasicReplayPGOProfile`, `$(AllPGOPlatforms)`, `$(PGOOptimizeCompileArgs<Platform>)`. Pair with `<Expand Name="BasicReplayPGOProfile" .../>` to wire a project's PGO pipeline (see Lyra recipe in §8). |
+| `Engine/Build/Graph/Tasks/Inc/GauntletSettings.xml` | Engine-side Gauntlet defaults (timeout, default exec lists, etc.). Included by project-side `GauntletSettings.xml`. |
+| `Engine/Plugins/Performance/AutomatedPerfTesting/Build/Inc/AutomatedPerfTestCommonSettings.xml` | Common settings for the AutomatedPerfTesting plugin (iteration defaults, FPS chart, CSV profiler, etc.). |
+| `Engine/Plugins/Performance/AutomatedPerfTesting/Build/Inc/AutomatedPerfTestProjectSettings.xml` | Per-project AutomatedPerfTest run definitions; expects `$(ReplayName)`, `$(ProjectName)` etc. to be set by the including script. |
+
+**Project usage pattern** (from `Samples/Games/Lyra/Build/LyraTests.xml`):
+
+```xml
+<!-- Required: set project info before including the engine scaffold -->
+<Property Name="ProjectName" Value="Lyra" />
+<Property Name="ProjectPath" Value="Samples/Games/Lyra" />
+<Property Name="WithBATDefaults" Value="false" />  <!-- opt out of engine defaults -->
+
+<!-- Pull in engine-side perf-test plumbing first (so its properties exist when BAT runs) -->
+<Include Script="../../../../Engine/Plugins/Performance/AutomatedPerfTesting/Build/Inc/AutomatedPerfTestProjectSettings.xml" />
+
+<!-- Project-local GauntletSettings (includes the engine one) -->
+<Property Name="GauntletSettingsFile" Value="$(RootDir)/Samples/Games/Lyra/Build/GauntletSettings.xml" />
+
+<!-- The big one: declares 'BuildAndTest Lyra' aggregate + all standard nodes -->
+<Include Script="../../../../Engine/Build/Graph/Tasks/BuildAndTestProject.xml" />
+
+<!-- PGO support (optional) -->
+<Include Script="$(RootDir)/Engine/Build/Graph/Tasks/PGOProfileProject.xml" />
+```
+
+If your project is on an **installed engine** (Epic Games Launcher), prefer writing your BuildGraph script from scratch with explicit `<Compile>` / `<Cook>` / `<Stage>` / `<Command Name="BuildCookRun" />` nodes. The Lyra meta-script pattern is not available to you.
+
+---
+
+## 13. Extending `BuildAndTestProject.xml` — the Lyra pattern
+
+`BuildAndTestProject.xml` exposes an `Aggregate` named `BuildAndTest <ProjectName>`. Project scripts extend by appending to a list property and declaring a super-aggregate:
+
+```xml
+<!-- 1. Take the base aggregate as the starting requirement set -->
+<Property Name="BuildAndTestExtendedRequirements" Value="BuildAndTest $(ProjectName)" />
+
+<!-- 2. Declare custom nodes that extend the build/test pipeline -->
+<Agent Name="$(ProjectName) Content Validation" Type="Win64">
+    <Node Name="$(ProjectName) Content Validation" Requires="$(PreNodeName)Compile Editor Win64">
+        <Command Name="LyraContentValidation" Arguments="..."/>
+    </Node>
+</Agent>
+
+<!-- 3. Conditionally append each custom node to the requirements -->
+<Do If="!$(SkipTest)">
+    <Property Name="BuildAndTestExtendedRequirements"
+              Value="$(BuildAndTestExtendedRequirements);$(ProjectName) Content Validation"/>
+</Do>
+
+<Do If="!$(SkipLocalization)">
+    <Property Name="BuildAndTestExtendedRequirements"
+              Value="$(BuildAndTestExtendedRequirements);$(ProjectName) Localize"/>
+</Do>
+
+<!-- 4. Final super-aggregate that pulls everything in -->
+<Aggregate Name="BuildAndTestExtended $(ProjectName)"
+           Requires="$(BuildAndTestExtendedRequirements)" />
+```
+
+**Why this pattern:** the base aggregate has Epic's standard build+test+stage chain. The super-aggregate adds project-specific steps (content validation, localization, audit-collection updates, store deployment) without modifying the engine scaffold. CI invokes `-Target="BuildAndTestExtended <ProjectName>"` instead of `BuildAndTest`.
+
+**`$(PreNodeName)` matters here.** Required-node names in `BuildAndTestProject.xml` are namespaced as `$(PreNodeName)Compile Editor Win64`, `$(PreNodeName)Stage Win64`, etc. — so multiple projects can coexist in one BuildGraph job. Always include `$(PreNodeName)` when referencing engine-scaffold nodes from your project script.
