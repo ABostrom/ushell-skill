@@ -37,7 +37,7 @@ The **Skip-conditions** block is what lets the planner not redo work. Each check
 9. **Cherrypick a CL across streams**
 10. **Run an automated perf test (`.perf test sequence`)**
 11. **Generate a Visual Studio solution and open it (with tiny fallback)**
-12. **Drive a commandlet (`.run commandlet ResavePackages -- -PackageDir=…`)**
+12. **Drive a commandlet (`.run commandlet ResavePackages -- -PackageFolder=…`)**
 13. **Run BuildCookRun directly via `.uat`**
 14. **Clean a branch safely (`.p4 clean --dryrun` → `.p4 clean`)**
 
@@ -440,11 +440,15 @@ Skip-conditions:
 **Concrete examples:**
 
 ```
-.run commandlet ResavePackages -- -PackageDir=Content/Foo -AutoCheckOutPackages
+.run commandlet ResavePackages -- -PackageFolder=<absolute-filesystem-path>/Content/Foo -AutoCheckOutPackages
 .run commandlet DerivedDataCache -- -fill -unattended
 .run commandlet GatherText -- -config=Config/Localization/Game.ini
 .run commandlet WorldPartitionBuilder -- /Game/Maps/MyMap -Builder=Minimap
-.run commandlet ResavePackages --build -- -PackageDir=Content/Foo  # build editor first
+.run commandlet ResavePackages --build -- -PackageFolder=<absolute-filesystem-path>/Content/Foo  # build editor first
+# WARNING: -PackageFolder= takes a filesystem path (e.g. E:\Work\MyProject\Content\Foo),
+# NOT a /Game/... virtual path. Without -PackageFolder=, -Package=<Name>, or
+# -Map=<MapName> set, the commandlet resaves EVERY package - including engine packages.
+# See reference/unreal-args.md §11 'ResavePackages scope' for the full token list.
 ```
 
 **With debugger:** add `--attach` (re-enters via `_run commandlet <Name> --attach` for the debugger plumbing).

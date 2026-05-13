@@ -158,7 +158,10 @@ This is how you call BCR from BuildGraph. **`-project=` is NOT inherited** — p
 
 ```xml
 <Commandlet Name="ResavePackages" Project="$(ProjectPath)"
-            Arguments="-PackageDir=Content/Foo -AutoCheckOutPackages"/>
+            Arguments="-PackageFolder=$(ProjectDir)/Content/Foo -AutoCheckOutPackages"/>
+<!-- IMPORTANT: ResavePackages uses -PackageFolder=<filesystem-path>, NOT -PackageDir=.
+     Without one of -Package=, -PackageFolder=, or -Map=, the commandlet resaves
+     EVERY package including engine packages. See reference/unreal-args.md §11. -->
 ```
 
 ### File ops

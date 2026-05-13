@@ -36,7 +36,7 @@ ushell normally opens an interactive `cmd.exe` window. To drive it from a Bash/P
 **Single command:**
 
 ```powershell
-cmd.exe /d /s /c "call <branch>\Engine\Extras\ushell\ushell.bat --project=<uproject> && .info --nosummary"
+cmd.exe /d /s /c "call <branch>\Engine\Extras\ushell\ushell.bat --project=<uproject> && .info"
 ```
 
 **Multiple commands — write a temp .bat:**
@@ -58,7 +58,7 @@ Exit codes:
 | `127` | Help printed (the user asked for help; not a failure) |
 | `80` / `90` | Reserved for the `.p4 bisect` script protocol (bad / failed-build) |
 
-Suppress the `Cmd.summarise` result/time banner with `--nosummary` on commands that have it (build, sync, mergedown, switch, …). Use this whenever you parse output.
+Suppress the `Cmd.summarise` result/time banner with `--nosummary` on commands decorated with `@summarise`: **`.build *`, `.p4 sync`, `.p4 mergedown`, `.p4 switch`** (and any future verb whose docstring or source declares it). Adding `--nosummary` to commands that don't have it (`.info`, `.run *`, `.cook *`, `.sln *`, `.kill`, `.notify`, `.uat`, `.p4 cherrypick`, `.p4 clean`, etc.) produces `ERROR: Unknown argument(s) 'nosummary'` and exits non-zero. When in doubt, omit it.
 
 The active `.uproject` lives in a session noticeboard keyed by `$FLOW_SID`. Every fresh invocation is a new session ID, so always pass `--project=<path>` to `ushell.bat`, or run `.project <path>` as the first command. Do NOT `cd` inside a `cmd /d /k ushell.bat` chain — ushell deliberately unsets `PWD`.
 

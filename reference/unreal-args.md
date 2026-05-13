@@ -352,7 +352,7 @@ When constructing from a channel (Python), pipe through `unreal.cmdline.read_uei
 - `-stdout` — log to stdout.
 - `-cookonthefly` — launch as cook-on-the-fly server.
 - `-noxgeshadercompile` — disable XGE for shader compile.
-- `-PackageDir=<path>` — restrict cook to a directory (for ResavePackages too).
+- `-PackageDir=<path>` — restrict cook to a directory **(cook only — NOT accepted by ResavePackages; see §11 for ResavePackages's actual scope flags `-PackageFolder=` / `-Package=` / `-Map=`).**
 - `-Map=<MapName>` — cook only this map.
 - `-SkipCookedPackages` — skip packages already cooked.
 - `-cooksinglepackage` — cook only the listed package(s).
@@ -396,7 +396,9 @@ With required/typical args:
 
 ```
 -run=Cook -targetplatform=Win64 -unattended -unversioned
--run=ResavePackages -PackageDir=<dir> [-AutoCheckOutPackages]
+-run=ResavePackages -PackageFolder=<filesystem-path>[+<path2>+...] [-AutoCheckOutPackages]
+-run=ResavePackages -Package=<PackageName>                          # single package
+-run=ResavePackages -Map=<MapName>[+<map2>+...]                     # one or more maps
 -run=DerivedDataCache -fill -unattended
 -run=GenerateDistillFileSets
 -run=GatherText -config=Config/Localization/<file>.ini
@@ -409,6 +411,18 @@ With required/typical args:
 ```
 
 Cross-reference: `.run commandlet <Name>` (ushell wrapper) for in-engine route, or `.uat <CommandName>` for the UAT-side variants that exist (e.g. `.uat ResavePackagesCommand`).
+
+### ResavePackages scope — verified empirically
+
+ResavePackages requires **exactly one** of these tokens to restrict scope:
+
+- `-Package=<PackageName>` — single package, resolved via `FPackageName::SearchForPackageOnDisk`.
+- `-PackageFolder=<filesystem-path>[+<path2>+...]` — one or more **filesystem** directories. Multi-folder uses `+` separator. Path is normalised then scanned with `FindPackagesInDirectory`. **Filesystem path, NOT `/Game/...` virtual** — e.g. `-PackageFolder=E:\Work\MyProject\Content\Maps`.
+- `-Map=<MapName>[+<map2>+...]` — one or more maps, multi-map via `+`.
+
+**Without** any of these (or with a misspelled flag like the never-existed `-PackageDir=`), `bExplicitPackages` stays false and the commandlet falls through to default behaviour: resave **every** package, including engine packages at `<engine>/Engine/Content/...`. This was verified by battle-testing on UE 5.7 (`-PackageDir=/Game/...` was silently ignored; 1500+ engine packages got format-bumped before kill).
+
+Source: `Engine/Source/Editor/UnrealEd/Private/Commandlets/ContentCommandlets.cpp:129-200` (UE 5.7).
 
 ---
 
@@ -442,7 +456,7 @@ Where to look:
 | Cook a single map only | `-run=Cook -targetplatform=<P> -Map=<MapName>` |
 | Listen-server start | `<MapName>?Listen?Game=<GameModeClass>` |
 | Client direct-connect | `-CONNECT=<ip:port>` |
-| Resave a content directory | `-run=ResavePackages -PackageDir=<dir>` |
+| Resave a content directory | `-run=ResavePackages -PackageFolder=<filesystem-path>` — see §11 warning; **without one of `-Package=`/`-PackageFolder=`/`-Map=` it resaves everything** |
 | Per-category verbose logging | `-LogCmds="LogX Verbose, LogY VeryVerbose"` |
 | CSV perf profiler | `-statnamedevents -statunitcsv` |
 | Force log flush after each line (CI debug) | `-FORCELOGFLUSH` |

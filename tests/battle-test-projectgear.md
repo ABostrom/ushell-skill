@@ -99,15 +99,33 @@ Where the skill is wrong:
 - `reference/channel-authoring.md` "Driving a commandlet" example uses `-PackageDir=` to limit ResavePackages to a folder.
 - `reference/workflows.md` §12 "Drive a commandlet" example: `.run commandlet ResavePackages -- -PackageDir=Content/Foo -AutoCheckOutPackages` — the assumption being that `-PackageDir=Content/Foo` restricts.
 
-Possible causes (need engine .cpp to confirm; not shipped in this install):
-- `-PackageDir=` is additive/seed, not restrictive.
-- Path format is wrong (`/Game/MovementModes` is a content-browser path; the commandlet may expect filesystem-relative path or `LongPackageName` form).
-- The exclusive filter is a different flag entirely (`-FilesToResave=`, `-MapsOnly`, `-Package=<wildcard>`).
+**Root cause (verified by reading `Engine/Source/Editor/UnrealEd/Private/Commandlets/ContentCommandlets.cpp:129-200` from `github.com/EpicGames/UnrealEngine` branch `5.7`):**
 
-**v1.2 fix:** until verified by reading `Engine/Source/Editor/UnrealEd/Private/Commandlets/ResavePackagesCommandlet.cpp` (not in this source-only install — needs an Epic Games GitHub UE5 clone), the skill should:
-1. Replace the ResavePackages examples with a **strong warning** that the documented `-PackageDir=` flag may not restrict scope and Engine content can be modified.
-2. Recommend ResavePackages users perform a **dry-run first** to confirm scope before letting it write. The commandlet supports `-CheckOutOnly` and `-NoAutoCheckout` for read-only modes; a true `-WhatIf` flag is also worth searching for.
-3. Note that the canonical safe pattern for "resave only project content" may need additional flags or a different approach (run in PIE mode with a tagged Python script, use the editor's right-click → "Asset Actions → Resave" UI in batch, etc.).
+`UResavePackagesCommandlet::InitializeResaveParameters` accepts exactly three mutually-exclusive scope tokens:
+
+```cpp
+if( FParse::Value( *CurrentSwitch, TEXT( "PACKAGE="), Package ) ) { ... bExplicitPackages = true; }
+else if( FParse::Value( *CurrentSwitch, TEXT( "PACKAGEFOLDER="), PackageFolderArg) ) { ... bExplicitPackages = true; }
+else if (FParse::Value(*CurrentSwitch, TEXT("MAP="), Maps)) { ... bExplicitPackages = true; }
+```
+
+- `-Package=<Name>` — single package (resolves via `FPackageName::SearchForPackageOnDisk`).
+- `-PackageFolder=<Path>[+<Path2>+...]` — one or more **filesystem** directories (uses `FindPackagesInDirectory`).
+- `-Map=<MapName>[+<Map2>+...]` — one or more maps.
+
+**`-PackageDir=` is NOT a recognised token.** With none of the three above set, `bExplicitPackages` stays false → commandlet falls through to default "resave everything" (engine packages included, per `[CommandletSettings] ResavePackages` ini + maps-only fallback).
+
+**v1.2 fix applied** (commits land on `feat/v1.2-fixes`):
+
+1. `reference/unreal-args.md` §11 — list `-PackageFolder=` / `-Package=` / `-Map=` with filesystem-path warning; mark `-PackageDir=` as never-existed; add "ResavePackages scope" subsection with empirical verification note.
+2. `reference/unreal-args.md` §13 quick map — corrected.
+3. `reference/workflows.md` §12 commandlet examples — use `-PackageFolder=<filesystem-path>`.
+4. `reference/buildgraph.md` `<Commandlet>` example — use `-PackageFolder=$(ProjectDir)/Content/Foo`.
+5. `reference/commands.md` `.run commandlet` ResavePackages example — corrected.
+6. `reference/uat.md` `ResavePackagesCommand` entry — note that the inner commandlet uses `-PackageFolder=`.
+7. `reference/channel-authoring.md` Resave class example — both Pattern A and Pattern B use `-PackageFolder=`.
+
+**F5 status: VERIFIED + RESOLVED in v1.2 docs.**
 
 **Operational damage:**
 - 1500+ Engine packages had their on-disk format bumped 1004 → 1018. UE 5.7's editor accepts both versions, so the engine install should still work. Will continue to monitor.
