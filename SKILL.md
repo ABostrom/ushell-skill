@@ -84,3 +84,70 @@ Each `reference/commands.md` entry declares **Preconditions** and **Produces**. 
 If the check is unclear, re-run the precondition.
 
 **Failure-policy:** if a step fails or a precondition is truly unreachable, **stop, report the verbatim error, suggest the next action, hand back to the user.** No silent fallback to raw tools, no destructive auto-recovery (don't delete `Saved/`, don't edit `.uproject`, don't `p4 reset` without consent).
+
+## Quick reference
+
+| Want to… | Command |
+|---|---|
+| See engine/project/platform state | `.info` |
+| List branch projects | `.info projects` |
+| Switch active project | `.project <name\|path\|cwd\|auto>` |
+| Generate VS solution | `.sln generate` |
+| Open existing solution | `.sln open` |
+| Open a tiny solution (fzf-only) | `.sln open tiny` |
+| Build editor | `.build editor [variant]` |
+| Build runtime | `.build {game\|client\|server} <platform>` |
+| Build a named program | `.build program <Name>` |
+| Clean before build | `.build clean editor` (etc.) |
+| Single file/module build | `.build editor <Module/File.cpp>` |
+| Build XML config (BuildConfiguration.xml) | `.build xml [edit\|set\|clear]` |
+| Generate compile_commands.json | `.build misc clangdb` |
+| Run editor | `.run editor -- <args>` |
+| Run a commandlet | `.run commandlet <Name> -- <args>` |
+| Run a program / named target | `.run program <Name>` / `.run target <Name>` |
+| Run cooked runtime | `.run {game\|client\|server} <platform> -- <args>` |
+| Run runtime with Insights trace | `.run game <P> --trace=<channels> -- <args>` |
+| Cook | `.cook {game\|client\|server} <platform>` |
+| Cook iteratively | `.cook game <P> --iterate` |
+| ODSC shader server | `.cook odsc {game\|client\|all} <platform>` |
+| Stage (auto Zen/pak) | `.stage <target> <platform> auto` |
+| Stage with Zen storage | `.stage <target> <platform> zen` |
+| Stage with pak files | `.stage <target> <platform> pak` |
+| Deploy already-staged | `.deploy <target> <platform>` |
+| Run UAT directly | `.uat <Command> -- <uat-args>` |
+| BuildCookRun via UAT | `.uat BuildCookRun -- <bcr-args>` *(reference/uat.md §2)* |
+| Package a plugin | `.uat BuildPlugin -- -Plugin=<path> -Package=<out> -TargetPlatforms=Win64+Linux -Rocket -StrictIncludes` |
+| Run a BuildGraph script | `.uat BuildGraph -- -script=<path.xml> -target=<Node> [-set:Foo=Bar]` |
+| List BuildGraph nodes | `.uat BuildGraph -- -script=<path.xml> -listonly` |
+| Run Gauntlet tests | `.uat RunUnreal -- -test=<TestName> -build=<staged\|editor> -platform=<P>` |
+| CI-friendly UAT baseline | append `-buildmachine -CrashForUAT -nop4 -NoCodeSign -unattended -nullrhi -utf8output -stdlog` |
+| Kill running UE process | `.kill {editor\|server\|client\|<platform>}` |
+| Sync from Perforce | `.p4 sync [<cl>]` |
+| Filter sync (edit .p4sync.txt) | `.p4 sync edit` |
+| Cherrypick CLs | `.p4 cherrypick <cl> [...]` |
+| Bisect a regression | `.p4 bisect <good> <bad> -- <script>` |
+| Mergedown from parent stream | `.p4 mergedown` |
+| Switch stream | `.p4 switch <stream>` / `.p4 switch list` |
+| List CL authors | `.p4 authors <path>` |
+| Who-broke-this-line | `.p4 who <path> [<line>]` |
+| Open P4V on this clientspec | `.p4 v` |
+| Create a new workspace | `.p4 workspace <dir> [<depotpath>]` |
+| Clean intermediate/Saved/ | `.p4 clean [--dryrun]` |
+| Authorize cloud DDC | `.ddc auth [<service>]` |
+| Start/stop ZenServer | `.zen start` / `.zen stop` |
+| ZenServer status / version | `.zen status` / `.zen version` |
+| Open Zen dashboard GUI | `.zen dashboard` |
+| Create Zen workspace / share | `.zen createworkspace <dir>` / `.zen createshare <dir>` |
+| Import a Zen oplog snapshot | `.zen importsnapshot <descriptor> [<index>]` |
+| Find a cooked-data snapshot for CL | `.zen snapshot find <runtime> <platform>` |
+| Download + import a snapshot | `.zen snapshot get <runtime> <platform> [<cl>]` |
+| List available snapshots | `.zen snapshot list <runtime> <platform>` |
+| Launch Insights | `.perf insights [<trace>\|latest]` |
+| Run automated perf test | `.perf test {default\|sequence\|replay\|material\|camera} <platform>` |
+| Download a cloud build | `.getbuild {packaged\|staged} <platform>` |
+| Flash console for attention | `.notify` |
+| Gather standalone ushell | `.ushell gather <destdir>` |
+
+## Zen ↔ UAT relationship
+
+`.zen *` commands talk to the standalone **ZenServer** process and the cloud/fileshare snapshot index. They are **not** a substitute for `.stage`. Staging still goes through UAT `BuildCookRun`, but `style=zen` (or `style=auto` driven by `Saved/Cooked/<form>/ue.projectstore`) tells UAT to package as a Zen oplog rather than pak/utoc. `.zen snapshot get` is the fast path for *"pull a pre-cooked dataset for this CL"* — it launches ZenServer if needed and imports the oplog. Always check `.zen status` before assuming Zen is running.
