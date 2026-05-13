@@ -6,7 +6,7 @@ The authoring workspace for a Claude Code skill that teaches Claude to drive **u
 ## Read first
 1. `docs/superpowers/specs/2026-05-13-ushell-skill-design.md` — the design spec. Everything in this repo is downstream of it.
 2. `docs/superpowers/specs/research-notes-uat.md` — digested UAT/BuildGraph research. Seed material for `reference/uat.md` and `reference/buildgraph.md`. Do not silently paraphrase or drop content from this file when implementing those references.
-3. `ue5-launch-with-spawn-point.md` — user-authored seed content for `reference/unreal-args.md` §2 (FURL grammar + PlayerStart Portal). Inline it verbatim when writing that section; do not invent `?StartPoint=` (it does not exist).
+3. `reference/unreal-args.md` §2 (FURL grammar + PlayerStart Portal). The user-authored seed `ue5-launch-with-spawn-point.md` has been inlined verbatim here. **Do not invent `?StartPoint=` or `?PlayerStartTag=` — they do not exist.** The spawn selector is the URL `#Portal` segment.
 
 ## Reference engine tree
 `E:\UE_5.7\Engine\Extras\ushell\` — the canonical ushell source. Every commands.md entry should cite the underlying file in the engine tree.
