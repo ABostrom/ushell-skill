@@ -28,3 +28,38 @@ Before doing anything else, locate ushell:
 - POSIX:   `<branch>/Engine/Extras/ushell/ushell.sh`
 
 If neither exists for the active `.uproject`'s engine, **stop and tell the user.** This is an older or partial branch; ushell verbs will not exist. Do not silently fall back to raw UBT/UAT.
+
+## Non-interactive invocation
+
+ushell normally opens an interactive `cmd.exe` window. To drive it from a Bash/PowerShell session without that, use one of these two forms.
+
+**Single command:**
+
+```powershell
+cmd.exe /d /s /c "call <branch>\Engine\Extras\ushell\ushell.bat --project=<uproject> && .info --nosummary"
+```
+
+**Multiple commands — write a temp .bat:**
+
+```bat
+@echo off
+call <branch>\Engine\Extras\ushell\ushell.bat --project=<uproject>
+.p4 sync --all
+.build editor
+```
+
+Exit codes:
+
+| Code | Meaning |
+|------|---------|
+| `0`  | Success |
+| `1`  | Failure |
+| `126` | Argument parse error (treat as your bug) |
+| `127` | Help printed (the user asked for help; not a failure) |
+| `80` / `90` | Reserved for the `.p4 bisect` script protocol (bad / failed-build) |
+
+Suppress the `Cmd.summarise` result/time banner with `--nosummary` on commands that have it (build, sync, mergedown, switch, …). Use this whenever you parse output.
+
+The active `.uproject` lives in a session noticeboard keyed by `$FLOW_SID`. Every fresh invocation is a new session ID, so always pass `--project=<path>` to `ushell.bat`, or run `.project <path>` as the first command. Do NOT `cd` inside a `cmd /d /k ushell.bat` chain — ushell deliberately unsets `PWD`.
+
+Full details and PowerShell module integration: `reference/invocation.md`.
