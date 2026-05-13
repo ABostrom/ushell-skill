@@ -1,0 +1,22 @@
+# Claude Code per-machine settings — never share these.
+.claude/settings.local.json
+
+# OS / editor noise
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+*~
+*.swp
+.vscode/
+.idea/
+
+# Tests notes can capture verbatim subagent transcripts that include paths,
+# timestamps, and other machine-specific churn. The RED/GREEN scenarios
+# themselves (baseline.md, with-skill.md) ARE tracked — only the raw
+# transcript file is ignored.
+tests/notes.md
+tests/transcripts/
+
+# Persisted tool-call outputs from the harness (research runs etc).
+*.tool-results.json
