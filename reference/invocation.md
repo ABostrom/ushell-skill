@@ -123,6 +123,76 @@ ushell wraps build/cook/etc. output in `_PrettyPrinter`, which colourises errors
 
 For grep-friendly output, pass `--unpretty` where supported (`.cook *`, `.cook odsc *`). For machine parsing, prefer `--nosummary` plus `--unpretty`.
 
+## Live output streaming (from Claude Code Agents)
+
+When driving ushell from an Agent tool call, two modes give the user visibility into what's happening:
+
+### Mode A — synchronous, full output inline
+
+Run via Bash without `run_in_background`. The tool waits for completion, then returns the full transcript as the tool result. Good for any operation up to ~10 minutes (the Bash tool's default timeout cap).
+
+```bash
+MSYS_NO_PATHCONV=1 cmd.exe /d /s /c 'call <branch>\Engine\Extras\ushell\ushell.bat --project=<uproject> && .build editor' 2>&1 | \
+    tr -d '\r' | \
+    sed -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\x1b\][^\x07]*\x07//g' | \
+    grep -aE '\[[0-9]+/[0-9]+\]|Result:|Total time|Total execution|Cleaning|^== Run:|error C[0-9]+|fatal error|Plugin .*dependency'
+```
+
+Per-flag rationale:
+
+| Bit | Why |
+|---|---|
+| `MSYS_NO_PATHCONV=1` | Stops Git Bash converting `/d /s /c` to filesystem paths |
+| Single-quoted cmd string | Avoids variable expansion (cmd args may contain `$`/`%`) |
+| `tr -d '\r'` | Strip CRLF → LF |
+| First `sed` | Strip ANSI color codes (`\x1b[...]m`) |
+| Second `sed` | Strip ANSI OSC progress codes (`\x1b]...\x07` — UBT writes these for terminal title bars) |
+| `grep -aE` | `-a` = treat as text even if log has nulls; `-E` = extended regex |
+| Filter pattern | Keep `[N/M]` actions, `Result:`, `Total time`, errors, plugin warnings; drop verbose line-of-the-day stuff |
+
+### Mode B — background + Monitor (live event streaming)
+
+For long operations (>10 min) where the user wants to see progress *as it happens* rather than at the end:
+
+```bash
+cat > /tmp/build-stream.sh << 'EOF'
+#!/bin/bash
+set -o pipefail
+LOG=/e/Work/build-stream.log
+rm -f "$LOG"
+echo "STREAM_BEGIN $(date +%s)" > "$LOG"
+MSYS_NO_PATHCONV=1 cmd.exe /d /s /c 'call <ushell.bat> --project=<x> && .build editor --nosummary' \
+    >> "$LOG" 2>&1
+echo "STREAM_END exit_code=$? $(date +%s)" >> "$LOG"
+EOF
+chmod +x /tmp/build-stream.sh
+# Dispatch with run_in_background: true
+/tmp/build-stream.sh
+```
+
+Then concurrently set up a Monitor:
+
+```bash
+touch /e/Work/build-stream.log
+tail -F /e/Work/build-stream.log 2>/dev/null | \
+  stdbuf -oL grep -E 'STREAM_(BEGIN|END)|\[[0-9]+/[0-9]+\]|Result: Succeeded|Result: Failed|^== Run:|error C[0-9]+:|fatal error|ERROR:|Exception while|Plugin .* dependency' | \
+  while IFS= read -r line; do
+    printf '%s\n' "$line"
+    if [[ "$line" == STREAM_END* ]]; then exit 0; fi
+  done
+```
+
+Each matched line becomes one Monitor notification streamed to the conversation as it occurs. `stdbuf -oL` is mandatory — without it `grep` buffers in 4KB chunks and you don't see anything for minutes. The `STREAM_BEGIN`/`STREAM_END` sentinels let Monitor shut down cleanly when the build exits (vs. running to its 600s timeout).
+
+### Choosing between A and B
+
+- **A** when you'll act on the output as a whole (parse for failures, copy the report path, etc.). Simpler — one tool call.
+- **B** when you want the user to watch live (long shipping build, cook, BuildGraph). More moving parts (two tool calls + a log file) but gives real-time event flow.
+
+Both should ALWAYS filter to interesting lines — UBT's raw output is ~1500 lines for a 33-action build; piping that whole stream wastes context and floods the user.
+
+---
+
 ## Forbidden moves
 
 - **Don't `cd` inside a `cmd /d /k ushell.bat` chain.** ushell deliberately unsets `PWD` in `_call_main` (`<ushell>/channels/flow/core/system/flow/cmd.py`) because subprocess + `os.chdir + p4` had subtle bugs. Use `--project=<path>` instead.
