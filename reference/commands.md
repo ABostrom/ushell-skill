@@ -452,7 +452,8 @@ Implicitly, `_Runtime` renames any existing `UECommandLine.txt` to `*_old_ushell
 **Examples:**
 
 ```
-.run commandlet ResavePackages -- -PackageDir=Content/Foo
+.run commandlet ResavePackages -- -PackageFolder=E:\Work\MyProject\Content\Foo
+# Note: -PackageFolder= takes a filesystem path, NOT /Game/... See unreal-args.md §11.
 .run commandlet DerivedDataCache -- -fill -unattended
 .run commandlet GatherText -- -config=Engine/Config/Localization/Engine.ini
 .run commandlet PluginInfoDump --build                              # build editor first
@@ -860,6 +861,8 @@ Uses `slnformer` to create a minimal `.sln` in `Intermediate/ProjectFiles/TinySl
 **Usage:** `.info projects [--json]`
 
 Calls `branch.read_projects()` and prints `.uproject` paths.
+
+**Preconditions:** UE **branch** layout with `*.uprojectdirs` files (i.e. a source-build branch root). On a standalone project against an installed engine, returns empty stdout AND leaks an `OSError` stack trace to stderr (`Unable to establish an Unreal context from directory '<engine>\Engine'`). Non-fatal — exit 0 — but noisy. **Use `.info` (no `projects` subverb) instead** for project info on non-branch layouts. See `reference/troubleshooting.md`.
 
 **Source:** `<ushell>/channels/unreal/core/cmds/info.py::Projects`
 

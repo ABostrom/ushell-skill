@@ -8,6 +8,24 @@ Symptom-keyed. Find your error message verbatim or close to it. Each entry: *Sym
 - **Cause:** No `.uproject` reachable from CWD and the session noticeboard's `"uproject"` key is empty.
 - **Fix:** Relaunch with `cmd.exe /d /s /c "call <ushell.bat> --project=<path>\<file>.uproject"`. Or, from an already-running ushell session, run `.project <path>` then retry the original command.
 - **Why:** `.project` writes the `.uproject` path to a session noticeboard keyed by `FLOW_SID`. Each new bat invocation gets a fresh `FLOW_SID`, so the noticeboard is empty until you populate it (with `--project=` or `.project`).
+- **Related boot-time wording (same root cause):** when `ushell.bat` itself is launched with no `--project=` and CWD is outside any `.uproject` tree, the bat prints (during boot, *before* any verb runs):
+  ```
+  !! Unable to locate any projects from 'C:\Users\Aaron'
+  !! Set a shortcut's 'Start In' to a folder with a valid .uproject
+  !! path or launch with the 'ushell --project=[uprojpath]' argument.
+  ```
+  Same fix: pass `--project=<path>` on the `ushell.bat` line.
+
+### `.info projects` prints an `OSError` stack trace and returns empty
+- **Cause:** `.info projects` calls `branch.read_projects()` which walks `*.uprojectdirs` files. Standalone projects against an installed engine have no `.uprojectdirs` (those live in source-build branch roots).
+- **Symptom:** stderr shows `## Unable to establish an Unreal context from directory 'X' [OSError]` with a 4-line Python stack trace through `_context.py:682 -> info.py:162 -> info.py:57`. Exit code is 0 (non-fatal) but the trace looks alarming.
+- **Fix:** For project info on a non-branch layout, use **`.info`** (no `projects`). It returns engine + project + targets + platforms correctly and doesn't touch `read_projects`.
+- **Why it's not a real error:** the stack-trace path is reachable but the surrounding code catches and continues; the command still exits 0. The trace is just noisy.
+
+### `Exception while creating build target for <X>: Program targets are not currently supported from this engine distribution`
+- **Cause:** UBT discovers Engine Programs (`IoStoreOnDemandTests`, `EventLoopUnitTests`, `DotNetPerforceLib`, etc.) but installed engines can't compile them — they need a source-build branch.
+- **Symptom:** During `.sln generate`, three or four "Exception while creating build target for X" warnings.
+- **Fix:** **Expected noise on installed engines.** Non-fatal — UBT skips them and continues. The generated `.sln` still includes your project and the standard engine-side targets. No action needed unless you actually need to build one of those Programs (in which case, get a source-build of UE).
 
 ### `ushell.bat opened a new window and exited`
 - **Cause:** Launched via Explorer or a shortcut without scripting form. ushell.bat's heuristic decided you're interactive and spawned a fresh console.

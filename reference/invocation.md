@@ -20,7 +20,7 @@ source <branch>/Engine/Extras/ushell/ushell.sh
 ## Single-command form (Windows)
 
 ```powershell
-cmd.exe /d /s /c "call <branch>\Engine\Extras\ushell\ushell.bat --project=<uproject> && .info --nosummary"
+cmd.exe /d /s /c "call <branch>\Engine\Extras\ushell\ushell.bat --project=<uproject> && .info"
 ```
 
 - `/d` skips AutoRun registry hooks; `/s` rationalises quoting; `/c` runs and exits.
@@ -71,7 +71,19 @@ Commands decorated with `Cmd.summarise` print a footer like:
 == Time: 0:00:42
 ```
 
-This breaks log parsers. Suppress with `--nosummary` on commands that accept it: `.build *`, `.p4 sync`, `.p4 mergedown`, `.p4 switch`, `.cook *` (some), and most things that take meaningful time.
+This breaks log parsers. Suppress with `--nosummary` on the commands that **actually accept it** (decorated with `@flow.cmd.Cmd.summarise` in their source):
+
+| Accepts `--nosummary` | Rejects `--nosummary` (errors with `Unknown argument(s)`) |
+|---|---|
+| `.build *` (every variant — target, editor, program, server, client, game, clean *) | `.info`, `.info projects`, `.info config` |
+| `.p4 sync` | `.run *` (editor, commandlet, program, target, server, client, game) |
+| `.p4 mergedown` | `.cook *` (most variants) |
+| `.p4 switch` | `.cook odsc *` |
+|  | `.sln *`, `.kill`, `.notify`, `.uat`, `.ushell gather`, `.getbuild`, `.ddc auth` |
+|  | `.p4 cherrypick`, `.p4 clean`, `.p4 reset`, `.p4 authors`, `.p4 who`, `.p4 v` |
+|  | `.zen *`, `.perf *` |
+
+**Empirically verified on UE 5.7.** When in doubt, omit `--nosummary` — adding it to a command that doesn't accept it makes the verb exit non-zero with `Usage: [--<options>] / ERROR: Unknown argument(s) 'nosummary'`.
 
 ## Active-project propagation
 

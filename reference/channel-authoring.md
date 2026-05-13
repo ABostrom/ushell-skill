@@ -99,7 +99,12 @@ import unreal.cmdline      # for read_ueified (UE arg quoting)
 import uelogprinter        # for colorised UE log output
 
 class Resave(unrealcmd.MultiPlatformCmd):
-    """Resaves packages under -PackageDir via the ResavePackages commandlet."""
+    """Resaves packages under a filesystem folder via the ResavePackages commandlet.
+
+    The commandlet uses -PackageFolder=<filesystem-path>; without it (or
+    -Package=<Name> / -Map=<MapName>), ResavePackages resaves EVERY package
+    including engine ones. See reference/unreal-args.md §11.
+    """
 
     packagedir = unrealcmd.Arg(str, "Directory of packages to resave (project-relative)")
     extra      = unrealcmd.Arg([str], "Extra args forwarded to the commandlet")
@@ -129,7 +134,7 @@ class Resave(unrealcmd.MultiPlatformCmd):
         args = (
             project.get_path(),
             "-run=ResavePackages",
-            "-PackageDir=" + self.args.packagedir,
+            "-PackageFolder=" + self.args.packagedir,  # filesystem path, NOT /Game/...
             "-unattended",
             "-stdout",
             *unreal.cmdline.read_ueified(*self.args.extra),
@@ -172,7 +177,7 @@ This is what `.cook --attach` does (in `<ushell>/channels/unreal/core/cmds/cook.
 import subprocess
 args = ("_run", "commandlet", "ResavePackages",
         "--",
-        "-PackageDir=" + self.args.dir,
+        "-PackageFolder=" + self.args.dir,  # filesystem path
         *unreal.cmdline.read_ueified(*self.args.extra))
 return subprocess.run(args).returncode
 ```

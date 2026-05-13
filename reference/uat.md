@@ -326,7 +326,7 @@ Compiles a `.uplugin` for distribution.
 
 ### 3.4 Content / data ops
 
-- **`ResavePackagesCommand`** — resave packages (forced commandlet wrapper). Common args: `-PackageDir=`, `-AutoCheckOutPackages`.
+- **`ResavePackagesCommand`** — UAT wrapper around the ResavePackages commandlet; P4-required, designed for lightmap rebuilds in Epic's internal CI. Note: the **inner** ResavePackages commandlet uses `-PackageFolder=<filesystem-path>` / `-Package=<Name>` / `-Map=<MapName>` to restrict scope — **NOT `-PackageDir=`** (that flag doesn't exist for this commandlet). See `reference/unreal-args.md` §11 ResavePackages scope.
 - **`FixupRedirects`** — flush soft-reference redirects.
 - **`RebuildHLODCommand`** — rebuild Hierarchical LODs.
 - **`RebuildLightMapsCommand`** — rebuild lightmaps.
