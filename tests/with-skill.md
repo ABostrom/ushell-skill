@@ -110,6 +110,75 @@ Agent must:
 
 ---
 
+## S8. Plugin packaging — GREEN expectation
+
+Agent must:
+1. Use `.uat BuildPlugin -- ...` (NOT raw `RunUAT.bat BuildPlugin`).
+2. Pass `-Plugin=E:\Work\MyProject\Plugins\MyPlugin\MyPlugin.uplugin` and `-Package=D:\Out\MyPlugin`.
+3. **Pass `-TargetPlatforms=Win64+Linux`** (the critical "since 4.25 BuildPlugin builds every detected SDK" gotcha).
+4. Include `-Rocket -StrictIncludes` for Marketplace grade.
+5. Mention that binary plugins are engine-minor-locked (5.4 ≠ 5.5).
+
+**Pass if:** at least 4 of 5 bullets present AND `-TargetPlatforms=` is explicit.
+
+## S9. BuildGraph nightly CI script — GREEN expectation
+
+Agent must produce a BuildGraph XML at `E:\Work\MyProject\Build\Nightly.xml` containing:
+1. `<BuildGraph>` root.
+2. `<Property>` or `<Option>` for project path + output dir + build version.
+3. At least one `<Agent>` block (ideally one per cook platform — Win64 + Linux).
+4. `<Node Name="Sync">` with `<Sync>` task.
+5. `<Node Name="Build Editor"...>` with `<Compile Target="...Editor" Platform="Win64" Configuration="Development"/>`.
+6. `<Node Name="Cook Win64"...>` and `<Node Name="Cook Linux"...>` — separately, in parallel agents.
+7. `<Node Name="Archive..."...>` with `<Copy>` or `<Zip>` to `$(BuildVersion)` path.
+8. `<HordeCreateReport>` for Horde dashboard upload.
+9. Invocation line: `.uat BuildGraph -- -script=E:\Work\MyProject\Build\Nightly.xml -target=<top-node>`.
+
+**Pass if:** at least 6 of 9 bullets present AND uses ushell `.uat BuildGraph` to invoke (not raw RunUAT).
+
+## S10. Cherrypick hotfix — GREEN expectation
+
+Agent must:
+1. Identify `.p4 cherrypick <CL>` as the canonical command.
+2. Invoke through ushell: `cmd.exe /d /s /c "call <ushell.bat> --project=... && .p4 cherrypick 1234567"`.
+3. Be aware that cross-stream cherrypick clears integration records (the "edigrate" step) and surface that.
+4. For "separate review for unresolved files" — either mention `.p4 mergedown`'s two-CL behaviour (it does the split automatically) OR explain `.p4 cherrypick`'s `--saferesolve` / `--noresolve` flag for manual resolve.
+
+**Pass if:** at least 3 of 4 bullets present AND `.p4 cherrypick` invoked through ushell (not raw `p4 integrate`).
+
+## S11. WorldPartitionBuilder — GREEN expectation
+
+Agent must:
+1. Use `.run commandlet WorldPartitionBuilder` (NOT raw editor `-Cmd.exe`).
+2. Pass `/Game/Maps/OpenWorld` as the positional map argument after `-- `.
+3. Pass `-Builder=Minimap` (the specific Builder type).
+4. Invoke through ushell with `--project=` and the non-interactive form.
+
+**Pass if:** all 4 bullets present AND `.run commandlet` is the entry (not `.uat` or raw `UnrealEditor-Cmd.exe`).
+
+## S12. Cooked Editor distribution — GREEN expectation
+
+Agent must:
+1. Use `.uat BuildCookRun -- ...` (NOT raw `RunUAT.bat`).
+2. Pass `-target=MyProjectCookedEditor` or `-target=<X>CookedEditor` plus `-CookedEditor` flag.
+3. `-platform=Win64 -clientconfig=Development`.
+4. `-build -cook -stage -archive -archivedirectory=D:\Out\MyProjectCookedEditor`.
+5. Mention that this is a niche workflow (thin-client artists) and that the resulting binary is a Cooked Editor — not standard.
+
+**Pass if:** at least 4 of 5 bullets present AND `-CookedEditor` flag appears.
+
+## S13. ODSC shader server — GREEN expectation
+
+Agent must:
+1. Use `.cook odsc client win64` (NOT raw `.cook game win64`).
+2. Note that the command runs the editor commandlet with `-odsc -cookonthefly` (per commands.md `.cook odsc *`).
+3. Explain that the cooked client launches with `-odschost=<server-ip>` to connect.
+4. Suggest running `.info` (or local PowerShell) to discover the server's IP.
+
+**Pass if:** at least 3 of 4 bullets present AND `.cook odsc client` is used (not `.cook game`).
+
+---
+
 ## Scoring
 
 | Scenario | Bullets met | Pass? |
@@ -121,8 +190,14 @@ Agent must:
 | S5 | x/4 | yes/no |
 | S6 | x/4 | yes/no |
 | S7 | x/7 (≥5 to pass) | yes/no |
-| **Total** | n/7 scenarios passing | |
+| S8 | x/5 (≥4 to pass) | yes/no |
+| S9 | x/9 (≥6 to pass) | yes/no |
+| S10 | x/4 (≥3 to pass) | yes/no |
+| S11 | x/4 | yes/no |
+| S12 | x/5 (≥4 to pass) | yes/no |
+| S13 | x/4 (≥3 to pass) | yes/no |
+| **Total** | n/13 scenarios passing | |
 
-Below 7/7 ⇒ REFACTOR the failing scenarios' loopholes in the skill content. Re-dispatch fresh subagents for the failing scenarios.
+Below 13/13 ⇒ REFACTOR the failing scenarios' loopholes in the skill content. Re-dispatch fresh subagents for the failing scenarios.
 
-The skill is "done" when all seven pass.
+The skill is "done" when all thirteen pass.

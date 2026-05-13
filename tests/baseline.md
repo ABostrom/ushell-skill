@@ -51,3 +51,39 @@ Prompt verbatim:
 Prompt verbatim:
 
 > Make me a shipping-grade packaged build of `MyProject` for Win64 client and Linux dedicated server in one go, with IoStore + compression, encrypted-ini paks (keychain at `D:\Keys\MyProject.keychain`), archived to `D:\Builds\MyProject\%BUILDVER%\`. This will run in CI so it must not pop dialogs or hang on crashes. Then run `Project.Smoke` automation tests against the staged Win64 client and write a Horde-readable report at `D:\Builds\MyProject\%BUILDVER%\TestReport\`. Project at `E:\Work\MyProject\MyProject.uproject`.
+
+## S8. Plugin packaging for Marketplace
+
+Prompt verbatim:
+
+> Package `E:\Work\MyProject\Plugins\MyPlugin\MyPlugin.uplugin` for Marketplace submission. Target Win64 + Linux. Output to `D:\Out\MyPlugin\`.
+
+## S9. BuildGraph nightly CI script
+
+Prompt verbatim:
+
+> Write me a BuildGraph script that, run nightly, syncs the engine + project, builds the editor for Win64, cooks Win64 + Linux in parallel agents, stages each, archives to `D:\Nightly\$BUILDVER\<Platform>\`, and produces a Horde report. Project is `E:\Work\MyProject\MyProject.uproject`. Save the script at `E:\Work\MyProject\Build\Nightly.xml`.
+
+## S10. Cherrypick a hotfix across streams
+
+Prompt verbatim:
+
+> I'm on the `//depot/Release` stream and CL 1234567 was submitted to `//depot/Main`. Pull just that CL into our Release stream as a hotfix, with a separate review for any files that don't resolve cleanly.
+
+## S11. World Partition data bake via commandlet
+
+Prompt verbatim:
+
+> Build the minimap for `/Game/Maps/OpenWorld` via WorldPartitionBuilder. Project at `E:\Work\MyProject\MyProject.uproject`.
+
+## S12. Cooked editor distribution
+
+Prompt verbatim:
+
+> Build a Cooked Editor distribution of `MyProject` for thin-client artists who shouldn't need a full source build. Win64, Development. Output to `D:\Out\MyProjectCookedEditor\`.
+
+## S13. ODSC shader compile server for cooked client
+
+Prompt verbatim:
+
+> Start an ODSC (On-Demand Shader Compile) server for the Win64 cooked client of `MyProject`. Then tell me how to point a running cooked client at it.
