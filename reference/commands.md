@@ -1016,3 +1016,551 @@ If multiple builds match, runs `fzf` for picking (closest-to-current-CL marked `
 **Implicit behaviour:** Shells out to `Engine/Binaries/DotNET/OidcToken/<host>/OidcToken[.exe]` with `--Service=<name>` (and `--Project=` when project active).
 
 **Source:** `<ushell>/channels/unreal/core/cmds/ddc.py::Auth`
+
+---
+
+# Zen
+
+ushell's `.zen *` commands split between two backends:
+- `ZenUETargetBaseCmd` runs an in-engine UE Program target (`ZenLaunch`, `ZenDashboard`).
+- `ZenUtilityBaseCmd` shells out to the `zen` CLI (`zen status`, `zen down`, etc.).
+
+## `.zen start` — Start ZenServer
+
+**Usage:** `.zen start [--SponsorProcessID=<pid>]`
+
+**Flags:**
+- `--SponsorProcessID` (str/"") — PID to register as sponsor (defaults to PPID on Windows, grandparent PID on Unix). Zen exits when no sponsors remain.
+
+**Preconditions:** None (will build `ZenLaunch` UE Program target if needed).
+**Produces:** Running ZenServer process.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::Start`
+
+## `.zen stop` — Stop running ZenServer
+
+**Usage:** `.zen stop`
+
+Runs `zen down`.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::Stop`
+
+## `.zen status` — Show ZenServer status
+
+**Usage:** `.zen status`
+
+Runs `zen status`. Use this **before** any `.zen snapshot get` to confirm the server is up.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::Status`
+
+## `.zen version` — Show in-tree zenserver version
+
+**Usage:** `.zen version`
+
+Runs `zen version`.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::Version`
+
+## `.zen dashboard` — Launch the Zen dashboard GUI
+
+**Usage:** `.zen dashboard`
+
+Runs the `ZenDashboard` UE Program target.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::Dashboard`
+
+## `.zen createworkspace` — Create a Zen workspace
+
+**Usage:** `.zen createworkspace <base_dir> [--dynamic]`
+
+**Args:**
+- `base_dir` (str) — Base path for the Zen workspace.
+
+**Flags:**
+- `--dynamic` (bool/false) — Allow dynamic creation of shares by clients.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::CreateWorkspace`
+
+## `.zen createshare` — Create a Zen workspace share
+
+**Usage:** `.zen createshare <share_dir>`
+
+**Args:**
+- `share_dir` (str) — Base path; must be inside an existing workspace.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::CreateShare`
+
+## `.zen importsnapshot` — Import an oplog snapshot
+
+**Usage:** `.zen importsnapshot <descriptor> [<index>] [flags]`
+
+**Args:**
+- `snapshotdescriptor` (str) — JSON descriptor file path.
+- `snapshotindex` (int/0) — Snapshot index within the descriptor.
+
+**Flags:**
+- `--projectid` (str/"") — Override project id (default: derived from current ushell project).
+- `--oplog` (str/"") — Override oplog name (default: from snapshot).
+- `--sourcehost` (str/"") — Override source host.
+- `--asyncimport` (bool/false) — Trigger import but don't wait.
+- `--forceimport` (bool/false) — Force re-import of all attachments.
+
+**Preconditions:** ZenServer running (will launch if not).
+
+**Source:** `<ushell>/channels/unreal/core/cmds/zen.py::ImportSnapshot`
+
+---
+
+# Zen snapshots
+
+These three commands query / download cooked-data snapshots from a build index (cloud or fileshare backend) and import them into ZenServer.
+
+## Shared snapshot args/flags
+
+All `.zen snapshot *` accept:
+
+- `runtime` (str) — `client | server | game`.
+- `platform` (str) — Platform name. For `server`, excludes Android.
+- `changelist` (int/-1) — `<1` means use current changelist from engine info.
+- `--buildroot` (str/"") — Fileshare root (defaults to `[FileshareBuildIndex]` editor config).
+- `--nofileshare` (bool/false) — Deprecated (default; uses Unreal Cloud DDC).
+- `--fileshare` (bool/false) — Force fileshare backend instead of cloud.
+- `--cloudhost` (str/"") — Cloud host override (default: `[StorageServers] Cloud.Host`).
+- `--flavor` (str/"") — Build flavor (e.g. ASTC/ETC2 for Android).
+- `--buildtype` (str/"") — Build type (e.g. nightly/standard).
+
+## `.zen snapshot find` — Find best snapshot for runtime/platform
+
+**Usage:** `.zen snapshot find <runtime> <platform> [<changelist>] [flags]`
+
+Prints the closest preceding changelist that matches, or notes "Exact match".
+
+**Source:** `<ushell>/channels/unreal/core/cmds/snapshot.py` (`pylib/zen/snapshot.py::Find`)
+
+## `.zen snapshot get` — Download + import a snapshot
+
+**Usage:** `.zen snapshot get <runtime> <platform> [<changelist>] [flags]`
+
+**Extra flags:**
+- `--projectid`, `--oplog`, `--sourcehost`, `--asyncimport`, `--forceimport` (same semantics as `.zen importsnapshot`).
+
+**Preconditions:** ZenServer reachable (launched if not). Cloud DDC OIDC token if using cloud backend.
+**Produces:** Zen oplog imported into ZenServer. Cooked content now visible to the editor/runtime.
+
+**Implicit behaviour:** If the requested CL doesn't match exactly, **prompts** (`p`/Enter/Ctrl-C) to use the closest preceding snapshot.
+
+**Examples:**
+
+```
+.zen snapshot get game ps5                             # latest game-PS5 snapshot
+.zen snapshot get game ps5 1234567                     # specific CL (prompts if near-miss)
+.zen snapshot get server linux --fileshare             # fileshare backend
+```
+
+**Source:** `<ushell>/channels/unreal/core/cmds/snapshot.py` (`pylib/zen/snapshot.py::Get`)
+
+## `.zen snapshot list` — List available snapshots
+
+**Usage:** `.zen snapshot list <runtime> <platform> [flags]`
+
+Lists changelists with snapshots available. Marks the currently-synced CL with `*`.
+
+**Use this as the cheap precondition check** before deciding whether to cook or use a snapshot.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/snapshot.py` (`pylib/zen/snapshot.py::List`)
+
+---
+
+# Perf
+
+## `.perf insights` — Launch Unreal Insights
+
+**Usage:** `.perf insights [<trace>] [-- <ui args>]`
+
+**Args:**
+- `trace` (str/"") — Trace ident (from server), `.utrace` file path, or literal `latest` (most recent under `%LOCALAPPDATA%/UnrealEngine/Common/UnrealTrace/Store/001/*.utrace` on Windows).
+- `uiargs` ([str]).
+
+**Flags:**
+- `--build` (bool/false) — Build `UnrealInsights` first.
+- `--attach` (bool/false) — Debug Insights.
+- `--debug` (bool/false) — Debug variant.
+- `--noautobuild` (bool/false) — Skip auto-build inference.
+
+**Implicit behaviour:** Auto-infers `--build` if no binary found (unless `--noautobuild`). Final action is `subprocess.run(("_run", "program", "UnrealInsights", <variant>, ...))` — i.e. a shim over `.run program UnrealInsights`.
+
+**Examples:**
+
+```
+.perf insights latest                                  # open most recent trace
+.perf insights Saved/Profiling/Traces/Boss.utrace      # open by path
+.perf insights                                         # launch Insights, blank
+.perf insights --build                                 # build first
+```
+
+**Source:** `<ushell>/channels/unreal/core/cmds/insights.py::Insights`
+
+## Shared `PerfTestBaseCmd` args/flags
+
+All `.perf test *`:
+
+- `platform` (str/host) — Platform to test on.
+- `subtest` (str/"all") — `perf | llm | insights | gpuperf | all`.
+- `variant` (str/"test").
+- `target` (str/"game") — `editor | program | server | client | game`.
+- `uatargs` ([str]).
+
+- `--repeat` (int/0) — Iterations (0 → defaults from `AutomatedPerfTestCommonSettings.xml`: Perf=6, LLM=3, Insights=1, GPUPerf=3, Default=1).
+- `--build` (str/"") — Use alternative staged directory.
+- `--targetname` (str/"") — Override target name.
+- `--resx` (int/0), `--resy` (int/0).
+- `--fps-chart` (bool/false).
+- `--debug-mem` (bool/false) — Auto-on for LLM/Insights.
+- `--testid` (str/"") — Defaults to `<project>-<subtest>-autoperftest-ushell`.
+
+## `.perf test default` — Run the project's default perf test
+
+**Usage:** `.perf test default [<platform>] [<subtest>] [<variant>] [<target>] [flags]`
+
+**Source:** `<ushell>/channels/unreal/core/cmds/perftest.py::PerfTestDefault`
+
+## `.perf test sequence` — Run a sequence perf test
+
+**Usage:** `.perf test sequence [<platform>] [<subtest>] [<variant>] [<target>] <SequenceComboName> [flags]`
+
+**Extra arg:** `SequenceComboName` — Tab-completed from `/Script/AutomatedPerfTesting.AutomatedSequencePerfTestProjectSettings.MapsAndSequencesToTest`.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/perftest.py::Sequence`
+
+## `.perf test replay` — Run a replay perf test
+
+**Usage:** `.perf test replay [...] <ReplayFile> [flags]`
+
+**Extra arg:** `ReplayFile` — accepts path or name searched among `**/*.replay`. Completes from `AutomatedReplayPerfTestProjectSettings.ReplaysToTest`.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/perftest.py::Replay`
+
+## `.perf test material` — Run a material perf test
+
+**Source:** `<ushell>/channels/unreal/core/cmds/perftest.py::Material`
+
+## `.perf test camera` — Run a static-camera perf test
+
+**Usage:** `.perf test camera [...] <MapName> [flags]`
+
+**Extra arg:** `MapName` — Completes from `AutomatedStaticCameraPerfTestProjectSettings.MapsToTest`.
+
+**Source:** `<ushell>/channels/unreal/core/cmds/perftest.py::StaticCamera`
+
+**For all `.perf test *`:**
+- **Preconditions:** Staged build at `Saved/StagedBuilds/<cook_form>/` (cook + stage already run).
+- **Produces:** Trace/CSV reports under `Saved/Profiling/` (paths controlled by the AutomatedPerfTesting plugin).
+- **Implicit behaviour:** Shells out to `.uat RunUnreal -- -test=AutomatedPerfTest.<X>` (see `reference/uat.md` §4 for the exact arg structure).
+
+---
+
+# Perforce (.p4 *)
+
+All `.p4 *` commands **require `p4 login` to have succeeded**. They set `P4IGNORE=.p4ignore.txt` and `P4CONFIG=.p4config.txt` in the env they pass to child P4 commands.
+
+## `.p4 sync` — Sync engine + project from Perforce
+
+**When:** Update local workspace to a CL or to head, with optional resolve.
+
+**Usage:** `.p4 sync [<changelist>] [flags]`
+
+**Args:**
+- `changelist` (str/"") — Default `now`. Literal `have` reads `Engine/Build/Build.version`'s `Changelist`. Tab completes `have`.
+
+**Flags:**
+- `--noresolve` (bool/false) — Skip `p4 resolve -am`.
+- `--dryrun` (bool/false).
+- `--all` (bool/false) — Sync all branch projects.
+- `--addprojs` (str/"") — Comma-separated additional project names.
+- `--clobber` (bool/false) — Clobber writable files (patches client spec for this run).
+- `--echo` (bool/false) — Echo depot paths as they sync.
+- `--nosummary` (bool/false).
+
+**Preconditions:** P4 login. `P4CLIENT` resolvable (not `*unknown*`).
+**Produces:** Local files updated. `Engine/Build/Build.version` `Changelist` and `BranchName` patched to match the requested CL.
+
+**Implicit behaviour:** Always syncs `<root>*`, `<root>Engine/...`, `<root>Templates/...`. With a UE context, syncs the current project's directory. Honours `.p4sync.txt` filters (excludes lines starting with `-`/`$-`, additional roots from `/`/`$/`). Uses `p4utils.Syncer` with 8 worker threads. Force-syncs `Engine/Build/Build.version` first.
+
+**Examples:**
+
+```
+.p4 sync                                               # to head
+.p4 sync 1234567                                       # to specific CL
+.p4 sync have                                          # to recorded engine CL
+.p4 sync --all --clobber                               # full sync, clobber writable
+```
+
+**`.p4sync.txt` syntax:**
+```
+# Comments start with #
+-.../Android/...           # exclude path glob
+-/Engine/Source/...        # exclude relative to root
+-*.uasset                  # exclude file pattern
+/Plugins/Custom/...        # additional sync root
+```
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/sync.py::Sync`
+
+## `.p4 sync edit` — Edit `.p4sync.txt` in your editor
+
+**Usage:** `.p4 sync edit`
+
+Opens `<root>/.p4sync.txt` in `$P4EDITOR` / `$GIT_EDITOR` / system default. Creates the file with a header comment block if missing.
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/sync.py::Edit`
+
+## `.p4 sync mini` — Minimal-engine sync (bootstrap)
+
+**Usage:** `.p4 sync mini [--dryrun]`
+
+Just enough to make a branch functional with ushell. Engine-only minimal sync (project population currently no-op).
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/workspace.py::MinSync`
+
+## `.p4 cherrypick` — Integrate or unshelve CL(s) into current branch
+
+**When:** Pull a fix from another stream / unshelve a pending CL into your active branch.
+
+**Usage:** `.p4 cherrypick <changelist...> [flags]`
+
+**Args:**
+- `changelist` ([int]) — CL number(s) or shelve(s).
+
+**Flags:**
+- `--path` (str/"") — Restrict to a sub-path (e.g. `Engine/...`).
+- `--saferesolve` (bool/false) — Don't auto-resolve.
+- `--noresolve` (bool/false).
+- `--dryrun` (bool/false).
+- `--force` (bool/false).
+- `--novalidate` (bool/false) — Skip "files already open for edit" check.
+- `--alwayseddy` (bool/false) — Always edigrate result (clear integration records).
+- `--noeddy` (bool/false) — Skip edigrate step.
+- `--sync` (bool/false) — Sync target to head before resolving.
+- `--virtual` (bool/false) — Server-side integration.
+- `--rawbranchspec` (bool/false) — Ignore generated branchspec.
+
+**Preconditions:** P4 login. Stream client. CWD under `info.clientRoot`.
+**Produces:** New pending CL with the cherrypicked changes; if not related streams (or `--alwayseddy`), integration records cleared.
+
+**Examples:**
+
+```
+.p4 cherrypick 1234567                                 # cherrypick one CL
+.p4 cherrypick 1234567 1234568 --saferesolve
+.p4 cherrypick 1234567 --path=Engine/Source/Runtime
+```
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/cherrypick.py::Cherrypick`
+
+## `.p4 bisect` — Binary-search CLs to find a regression
+
+**When:** Find the CL that broke a known-good behaviour.
+
+**Usage:** `.p4 bisect <good> <bad> [-- <script> <args>] [flags]`
+
+**Args:**
+- `good` (int) — First-good CL.
+- `bad` (int) — Known-bad CL.
+- `script` ([str]) — Script path + args to automate verdict.
+
+**Flags:**
+- `--dryrun` (bool/false) — Don't sync/run.
+- `--silentsync` (bool/false).
+- `--clsfromcwd` (bool/false) — Build candidate CLs from CWD instead of engine+project.
+
+**Preconditions:** P4 login. Either UE branch context OR `--clsfromcwd`.
+**Produces:** Identifies the offending CL.
+
+**Script protocol exit codes:**
+- `0` — **good**
+- `80` — **bad**
+- `90` — **failed-build** (treated as "ugly"; bisect expands outward to find a non-ugly index)
+
+Any other exit code falls back to interactive prompt.
+
+**Examples:**
+
+```
+.p4 bisect 1234000 1234999 -- build-and-run.bat        # automated bisect
+.p4 bisect 1234000 1234999                             # interactive
+```
+
+**Example `build-and-run.bat`:**
+
+```bat
+@echo off
+call <ushell.bat> --project=<uproject>
+.build editor
+if errorlevel 1 exit 90
+.run editor -- -stdout -ExecCmds="Quit"
+if errorlevel 1 exit 80
+exit 0
+```
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/bisect.py::Bisect`
+
+## `.p4 mergedown` — Merge down from parent stream
+
+**Usage:** `.p4 mergedown [<changelist>] [flags]`
+
+**Args:**
+- `changelist` (str/"") — CL to merge down at; default head of parent stream.
+
+**Flags:**
+- `--path` (str/"") — Limit to sub-path.
+- `--maxscanrows` (int/0) — `-Zmaxscanrows=` for the server.
+- `--dryrun` (bool/false).
+- `--noautoresolve` (bool/false).
+
+**Preconditions:** P4 login. Stream client.
+**Produces:** Destination CL with merged changes. Two CLs total: main merge CL + a `#nocheckin`-marked "still needs resolving" CL.
+
+**Implicit behaviour:** Two-stage resolve. First `-as` (safe). Files still needing resolve are moved into a separate review CL. Then `-am` unless `--noautoresolve`. Decorated `@summarise`.
+
+**Examples:**
+
+```
+.p4 mergedown                                          # parent head
+.p4 mergedown 1234567                                  # specific parent CL
+.p4 mergedown --path=Engine/Source                     # limit to engine source
+```
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/mergedown.py::MergeDown`
+
+## `.p4 switch` — Switch stream client between streams
+
+**Usage:** `.p4 switch [<stream>] [<changelist>] [flags]`
+
+**Args:**
+- `stream` (str/"") — Destination stream name (relative to current depot). fzf if omitted in interactive mode.
+- `changelist` (int/-1) — CL to sync to (head if unspecified).
+
+**Flags:**
+- `--haveonly` (bool/false) — Only switch files synced prior.
+- `--saferesolve` (bool/false).
+
+**Preconditions:** P4 login. Stream client. UE branch context.
+**Produces:** Client switched to destination stream. Open files shelved into a backup CL, unshelved into destination, resolved.
+
+**Examples:**
+
+```
+.p4 switch Main                                        # switch to //depot/Main
+.p4 switch Dev 1234567                                 # switch + sync to CL
+.p4 switch                                             # fzf-pick
+```
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/switch.py::Switch`
+
+## `.p4 switch list` — Tree-print streams under current depot
+
+**Usage:** `.p4 switch list`
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/switch.py::List`
+
+## `.p4 workspace` — Create a new P4 workspace
+
+**Usage:** `.p4 workspace <localdir> [<depotpath>] [flags]`
+
+**Args:**
+- `localdir` (str) — Local directory for the workspace (must be empty).
+- `depotpath` (str/"") — Depot path (fzf-walk if empty interactively).
+
+**Flags:**
+- `--name` (str/"") — Workspace name (default: `{user}_{host}_{stem}`).
+- `--dryrun` (bool/false).
+
+**Preconditions:** P4 login.
+**Produces:** New client created on the P4 server, `.p4config.txt` written to `localdir`, minimal sync if depot path is a UE branch root.
+
+**Examples:**
+
+```
+.p4 workspace E:\Work\NewBranch //depot/Main
+.p4 workspace E:\Work\NewBranch                        # fzf-pick depot path
+```
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/workspace.py::Workspace`
+
+## `.p4 clean` — Remove intermediate/Saved/DDC build artifacts
+
+**Usage:** `.p4 clean [flags]`
+
+**Flags:**
+- `--dryrun` (bool/false) — Report what would be removed.
+- `--allsaved` (bool/false) — Wipe entire `Saved/`.
+- `--savedkeeps` (str/"Profiling,StagedBuilds") — Comma-separated `Saved/` subdirs to keep.
+
+**Preconditions:** UE branch context. No running UE processes rooted in branch (else fails). `rg` on PATH.
+**Produces:** Removed: `Intermediate/` (entire), `DerivedDataCache/` (entire), `Binaries/` (only unversioned files — P4 `have` checked), `Saved/` (subdirs except keeps).
+
+**Implicit behaviour:** Two-phase removal: rename targets into `<branch_root>/.ushell_clean/<pid>_<hash>_<parent>_<name>`, then detached `cmd /d/c rd /q/s` (or `rm -rf` on POSIX) at exit.
+
+**Examples:**
+
+```
+.p4 clean --dryrun                                     # report size
+.p4 clean                                              # actually clean
+.p4 clean --savedkeeps=StagedBuilds,Profiling,Logs
+```
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/clean.py::Clean`
+
+## `.p4 reset` — Reconcile branch to match depot
+
+**Usage:** `.p4 reset [--thorough]`
+
+**Flags:**
+- `--thorough` (bool/false) — Use content digests, not modtime.
+
+**Preconditions:** Interactive confirmation prompt.
+**Produces:** Local files match depot exactly (`p4 reconcile -wade`).
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/clean.py::Reset`
+
+## `.p4 authors` — List file authors ranked by contribution
+
+**Usage:** `.p4 authors <path> [flags]`
+
+**Flags:**
+- `--after` (str/"") — Only count changes after `YYYY/mm/dd`.
+- `--pastyear` (bool/false).
+- `--pasttwoyears` (bool/false).
+- `--time` (bool/false) — Print perf timings.
+- `--follow-integrations` (bool/false) — `p4 annotate -I` not `-i`.
+- `--normalize-scores` (bool/true) — Normalize printed scores.
+
+Score formula: `linecount / sqrt(num_files_in_cl)`.
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/authors.py::Authors`
+
+## `.p4 who` — Who-broke-this-line
+
+**Usage:** `.p4 who <path>[#rev|@cl] [<line>] [flags]`
+
+**Args:**
+- `path` (str) — Path; can include `#rev` or `@cl` suffix.
+- `line` (int/0) — Line number; 0 → interactive fzf line picker.
+
+**Flags:**
+- `--printdiff` (bool/false) — Unified diff instead of launching P4V.
+- `--noremap` (bool/false) — Skip remapping line nos against local edits.
+
+**Implicit behaviour:** Chases the line through integrations/moves/branches via `p4 annotate -dwl -q` + `p4 filelog -s -m1`. Stops at `edit` or `add` (first introduction).
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/who.py::Who`
+
+## `.p4 v` — Open P4V for current client
+
+**Usage:** `.p4 v [-- <p4v args>]`
+
+**Args:** `p4vargs` ([str]).
+
+**Implicit behaviour:** Detects current client owning CWD via `p4utils.get_client_from_dir`. Skips launch on Windows if P4V is already open with the same client.
+
+**Source:** `<ushell>/channels/unreal/perforce/cmds/gui.py::Gui`
