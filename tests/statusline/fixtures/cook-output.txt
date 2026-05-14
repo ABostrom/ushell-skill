@@ -1,0 +1,5 @@
+[2026.05.14-11.34.10:999][  0]LogShaderCompilers: Display: Material Cache Hits: 0 (0%)
+[2026.05.14-11.34.10:999][  0]LogShaderCompilers: Display: ================================================
+[2026.05.14-11.34.11:185][  0]LogCook: Display: Cooked packages 449 Packages Remain 28 Total 477
+[2026.05.14-11.34.12:128][  0]LogCook: Display: Garbage collection triggered (Soft).
+[2026.05.14-11.34.14:070][  0]LogCook: Display: Cooked packages 450 Packages Remain 27 Total 477

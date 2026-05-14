@@ -1,0 +1,5 @@
+Building 1 actions with 8 processes
+[1/118] Compiling Module.LyraGame.1.cpp
+[2/118] Compiling Module.LyraGame.2.cpp
+[12/118] Compiling LyraCharacter.gen.cpp
+[42/118] Compiling Module.GameFeatures.cpp

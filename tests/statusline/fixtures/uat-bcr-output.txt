@@ -1,0 +1,4 @@
+********** COOK COMMAND STARTED **********
+Running UnrealEditor-Cmd.exe -run=Cook ...
+[2026.05.14-11.34.11:185][  0]LogCook: Display: Cooked packages 449 Packages Remain 28 Total 477
+[2026.05.14-11.34.14:070][  0]LogCook: Display: Cooked packages 450 Packages Remain 27 Total 477

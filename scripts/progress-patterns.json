@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "patterns": [
+    {
+      "verb": ".cook",
+      "regex": "LogCook: Display: Cooked packages (?<n>\\d+) Packages Remain \\d+ Total (?<t>\\d+)",
+      "format": "{n}/{t}",
+      "note": "ushell .cook channel writes UnrealEditor-Cmd.exe -run=Cook stdout/stderr unfiltered. The N/T values track cooked-package count."
+    },
+    {
+      "verb": ".build",
+      "regex": "\\[(?<n>\\d+)/(?<t>\\d+)\\] ",
+      "format": "{n}/{t}",
+      "note": "UBT progress markers from Build.bat. Format is '[N/M] <action>'. Watch for the LAST occurrence in the tail."
+    },
+    {
+      "verb": ".uat BuildCookRun",
+      "regex": "LogCook: Display: Cooked packages (?<n>\\d+) Packages Remain \\d+ Total (?<t>\\d+)",
+      "format": "{n}/{t}",
+      "note": "BCR's -cook phase emits the same LogCook lines as a standalone .cook. Build phase reuses .build pattern; this default targets the cook phase."
+    },
+    {
+      "verb": ".p4 sync",
+      "regex": "Files synced: (?<n>\\d+) of (?<t>\\d+) files",
+      "format": "{n}/{t}",
+      "note": "ushell .p4 sync emits this summary periodically during long syncs."
+    }
+  ]
+}
