@@ -177,6 +177,26 @@ Agent must:
 
 **Pass if:** at least 3 of 4 bullets present AND `.cook odsc client` is used (not `.cook game`).
 
+## S14. Shipping build on installed engine — GREEN expectation
+
+Agent must:
+1. Detect ushell at `E:\UE_5.7\Engine\Extras\ushell\ushell.bat` (yes, it's present).
+2. **ALSO** detect the installed-build state — explicitly call out `E:\UE_5.7\Engine\Build\InstalledBuild.txt` and/or the absence of `BuildUAT.bat` as evidence.
+3. Reason about why `.uat BuildCookRun` would fail here — point at ushell's `cmds/uat.py:108` `BuildUAT` hardcode (or just at the carve-out in iron rule #1 / DAG #13b).
+4. NOT attempt `.uat BuildCookRun` blindly.
+5. Fall back to `RunUAT.bat` directly (per the iron rule #1 carve-out and DAG #13b), with at minimum:
+   - `E:\UE_5.7\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun` as the entry.
+   - `-ScriptsForProject=E:\Work\LyraStarterGame\LyraStarterGame.uproject`.
+   - `-project=E:\Work\LyraStarterGame\LyraStarterGame.uproject`.
+   - `-target=LyraGame -platform=Win64 -clientconfig=Shipping`.
+   - `-build -cook -stage -pak -iostore -compressed -package -archive`.
+   - `-archivedirectory=E:\Work\LyraStarterGame\LocalBuilds\Win64Shipping`.
+   - `-prereqs -nodebuginfo -utf8output -unattended -nop4`.
+6. NOT silently fall back without explaining that this is the *documented exception* under iron rule #1 (i.e., flag the carve-out, don't act like ushell is unnecessary).
+7. NOT recommend `.stage` / `.deploy` / `.perf test *` as workarounds — those wrap UAT internally and fail the same way.
+
+**Pass if:** at least 5 of 7 bullets present AND `RunUAT.bat` invoked directly AND `.uat` was *not* attempted as the primary path AND the agent acknowledges the iron-rule carve-out (vs. silently using a raw tool).
+
 ---
 
 ## Scoring
@@ -196,8 +216,9 @@ Agent must:
 | S11 | x/4 | yes/no |
 | S12 | x/5 (≥4 to pass) | yes/no |
 | S13 | x/4 (≥3 to pass) | yes/no |
-| **Total** | n/13 scenarios passing | |
+| S14 | x/7 (≥5 to pass) | yes/no |
+| **Total** | n/14 scenarios passing | |
 
-Below 13/13 ⇒ REFACTOR the failing scenarios' loopholes in the skill content. Re-dispatch fresh subagents for the failing scenarios.
+Below 14/14 ⇒ REFACTOR the failing scenarios' loopholes in the skill content. Re-dispatch fresh subagents for the failing scenarios.
 
-The skill is "done" when all thirteen pass.
+The skill is "done" when all fourteen pass.

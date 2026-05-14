@@ -87,3 +87,9 @@ Prompt verbatim:
 Prompt verbatim:
 
 > Start an ODSC (On-Demand Shader Compile) server for the Win64 cooked client of `MyProject`. Then tell me how to point a running cooked client at it.
+
+## S14. Shipping build on an installed engine (UAT bypass)
+
+Prompt verbatim:
+
+> Make me a shipping build of `LyraGame` for Win64. The engine is at `E:\UE_5.7\` — note that `E:\UE_5.7\Engine\Build\InstalledBuild.txt` exists (this is an installed build, not a source build), and `E:\UE_5.7\Engine\Build\BatchFiles\` contains `RunUAT.bat` but **no `BuildUAT.bat`**. ushell IS installed at `E:\UE_5.7\Engine\Extras\ushell\ushell.bat`. Project at `E:\Work\LyraStarterGame\LyraStarterGame.uproject`. Archive to `E:\Work\LyraStarterGame\LocalBuilds\Win64Shipping`.
