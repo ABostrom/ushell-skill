@@ -105,6 +105,45 @@ Symptom-keyed. Find your error message verbatim or close to it. Each entry: *Sym
 - **Cause:** Engine `Engine/Build/BatchFiles/` is missing — partial sync, or you're pointed at a non-engine directory.
 - **Fix:** `.p4 sync --all` to bring the engine binaries back. Verify with `.info` that `engine.path` is sensible.
 
+### `.uat *` fails with `[WinError 2] The system cannot find the file specified` referencing `BuildUAT.bat`
+- **Symptom:** Any `.uat` verb (`.uat BuildCookRun`, `.uat BuildPlugin`, `.uat BuildGraph`, `.uat RunUnreal`, etc.) prints, before doing any real work:
+  ```
+  == Run: <branch>\Engine\Build\BatchFiles\BuildUAT.bat
+  ##
+  ## [WinError 2] The system cannot find the file specified
+  ##
+  ## [FileNotFoundError]
+  ##
+  ## _execute_child .. subprocess.py:1566
+  ## __init__ ........ subprocess.py:1075
+  ## launch .......... _annels\flow\core\system\flow\_runnable.py:105
+  ## launch .......... _ell\channels\flow\core\system\flow\cmd.py:41
+  ```
+  Glob of `<branch>\Engine\Build\BatchFiles\` shows `RunUAT.{bat,command,sh}` but **no `BuildUAT.*`**.
+- **Cause:** This is an installed build. Installed engines (Epic Games Launcher distributions, binary distributions, and source-style builds marked with `Engine/Build/InstalledBuild.txt`) **strip `BuildUAT.bat`** because UAT comes precompiled — there's no source to recompile. ushell's `channels/unreal/core/cmds/uat.py:108` unconditionally calls `_get_build_script("BuildUAT")` on Windows, so `.uat` blows up before invoking RunUAT.
+- **Corroborating signals:** UBT's earlier `.sln generate` output included `Program targets are not currently supported from this engine distribution` and `WARNING: ... disabled when packaging from an installed version of the engine`. Both confirm installed-build state.
+- **Fix:** Fall back to `RunUAT.bat` directly. This is the **only allowed** direct-RunUAT invocation under the iron rule #1, because ushell genuinely cannot do the job here. See SKILL.md iron rule #1 carve-out and `reference/workflows.md` DAG #13b for the canonical workaround.
+  ```powershell
+  <branch>\Engine\Build\BatchFiles\RunUAT.bat <Command> `
+    -ScriptsForProject=<full path>\<Name>.uproject `
+    <other UAT args>
+  ```
+  Example for a shipping `BuildCookRun`:
+  ```powershell
+  E:\UE_5.7\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun `
+    -ScriptsForProject=E:\Work\LyraStarterGame\LyraStarterGame.uproject `
+    -project=E:\Work\LyraStarterGame\LyraStarterGame.uproject `
+    -target=LyraGame -platform=Win64 -clientconfig=Shipping `
+    -build -cook -stage -pak -iostore -compressed -package -archive `
+    -archivedirectory=E:\Work\LyraStarterGame\LocalBuilds\Win64Shipping `
+    -prereqs -nodebuginfo -utf8output -unattended -nop4
+  ```
+- **Inferred-failing verbs that wrap UAT internally** (the same fallback applies — invoke `RunUAT.bat <Command>` directly):
+  - `.stage <target> <platform> <style>` — wraps `BuildCookRun -stage`.
+  - `.deploy <target> <platform>` — wraps `BuildCookRun -deploy`.
+  - `.perf test *` — wraps `RunUnreal -test=AutomatedPerfTest.*`.
+- **Verbs that *do* work on installed engines through ushell** (UBT or stand-alone Python; no UAT round-trip): `.info`, `.project`, `.sln generate`, `.sln open`, `.build editor`, `.build {game|client|server} <P> [<variant>]`, `.build program`, `.run editor`, `.run game/client/server`, `.run commandlet`, `.cook game/client/server`, `.cook odsc`, `.p4 *`, `.zen *`, `.ddc auth`, `.kill *`, `.getbuild`, `.notify`.
+
 ### Tab completion empty for `.build target`
 - **Cause:** `Source/*.Target.cs` not synced, or `Intermediate/Build/BuildRules/*RulesManifest.json` not generated.
 - **Fix:** `.p4 sync`, then `.sln generate` to populate manifests. The completion source is `<branch>/Source/*.Target.cs` plus the manifest.

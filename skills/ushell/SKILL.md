@@ -7,7 +7,9 @@ description: Use when working in an Unreal Engine branch that contains
   BuildCookRun), managing Zen storage or DDC, running automated perf tests,
   downloading cloud builds, or authoring a new ushell channel
   (describe.flow.py, flow.cmd.Cmd / unrealcmd.Cmd subclasses). Also use when
-  a ushell command fails and needs diagnosis.
+  a ushell command fails and needs diagnosis, including the installed-build
+  engine case where ushell is present but BuildUAT.bat is stripped (.uat fails
+  with WinError 2 / FileNotFoundError).
 ---
 
 # ushell
@@ -17,6 +19,8 @@ ushell is Epic's command-line interface for Unreal Engine, shipped at `<branch>/
 ## Iron rules
 
 1. **If `Engine/Extras/ushell/ushell.bat` (or `.sh`) exists for the active `.uproject`, drive build infrastructure through ushell.** Do not invoke `RunUAT.bat`, `UnrealBuildTool.exe`, `GenerateProjectFiles.bat`, `Build.bat`, or raw `p4` directly. There is no silent fallback — if a need genuinely isn't covered, stop and report.
+
+   **Installed-engine carve-out.** If the engine is an *installed build* (`<branch>/Engine/Build/InstalledBuild.txt` is present), the `.uat` family is **non-functional**: ushell's `channels/unreal/core/cmds/uat.py:108` unconditionally calls `Engine/Build/BatchFiles/BuildUAT.bat`, which installed engines strip (UAT ships precompiled). On installed engines, fall back to **`<branch>\Engine\Build\BatchFiles\RunUAT.bat`** directly for `.uat *`, plus the UAT-wrappers `.stage`, `.deploy`, and `.perf test *`. This is the **only** permitted direct-RunUAT invocation under this rule. Verbs that don't go through UAT — `.info`, `.project`, `.sln *`, `.build *`, `.run *` (including `.run commandlet`), `.cook *` (including `.cook odsc`), `.p4 *`, `.zen *`, `.ddc *`, `.kill *` — work normally because they hit UBT or stand-alone Python. See `reference/troubleshooting.md` (`.uat *` fails with `[WinError 2]`) and `reference/workflows.md` DAG #13b for the canonical workaround.
 2. **Every ushell command accepts `--help`.** Run it before guessing flags.
 3. **Don't invent a command.** If `.foo` isn't in the Quick Reference below or `reference/commands.md`, look it up. Don't reach for a half-remembered RunUAT flag instead.
 
@@ -28,6 +32,8 @@ Before doing anything else, locate ushell:
 - POSIX:   `<branch>/Engine/Extras/ushell/ushell.sh`
 
 If neither exists for the active `.uproject`'s engine, **stop and tell the user.** This is an older or partial branch; ushell verbs will not exist. Do not silently fall back to raw UBT/UAT.
+
+Also check **`<branch>/Engine/Build/InstalledBuild.txt`**. If present, the engine is an *installed build* (Epic Games Launcher install, binary distribution, or source-style build marked installed). UBT itself reveals this state during `.sln generate` with `Program targets are not currently supported from this engine distribution` and similar messages. In that state, ushell's `.uat` family — and anything that wraps it (`.stage`, `.deploy`, `.perf test`) — is non-functional; use the workarounds in iron rule #1's carve-out. This is **distinct** from the no-ushell-at-all case: here ushell IS installed and most verbs work fine, just not the UAT-dependent ones.
 
 ## Non-interactive invocation
 
@@ -165,7 +171,7 @@ If the check is unclear, re-run the precondition.
 
 ## Anti-patterns
 
-- **Don't call `RunUAT.bat`, `UnrealBuildTool.exe`, `GenerateProjectFiles.bat`, `Build.bat`, or raw `p4` when ushell is present.** Use `.uat`, `.build`, `.sln generate`, `.p4 *` instead.
+- **Don't call `RunUAT.bat`, `UnrealBuildTool.exe`, `GenerateProjectFiles.bat`, `Build.bat`, or raw `p4` when ushell is present.** Use `.uat`, `.build`, `.sln generate`, `.p4 *` instead. **Single exception:** on *installed* engines (`InstalledBuild.txt` present), `.uat` is broken at the source level — fall back to `RunUAT.bat` directly. See iron rule #1 carve-out and `reference/troubleshooting.md`.
 - **Don't invent UE switches.** Common hallucinations to watch for:
   - `?StartPoint=<Name>` or `?PlayerStartTag=<Name>` — **does not exist as a UE switch**. The spawn selector is the URL `#Portal` segment: `<MapName>#<PortalTag>`. The tag must match an `APlayerStart`'s `PlayerStartTag` property. (Resolved by `AGameModeBase::FindPlayerStart_Implementation`.) See `reference/unreal-args.md` §2.
   - `-encrypt` — use `-encryptinifiles` plus `-signpak`/`-signpakid=` and `-cryptokeys=<keychain.json>`.
