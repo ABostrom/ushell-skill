@@ -110,8 +110,14 @@ if ($Phase -eq 'post') {
     if ($hookInput.tool_response -and $hookInput.tool_response.PSObject.Properties.Name -contains 'exit_code') {
         $exitCode = [int]$hookInput.tool_response.exit_code
     }
+    # state.active.started might be a [DateTime] (ConvertFrom-Json auto-coercion) or string
     $started = $null
-    try { $started = [DateTimeOffset]::Parse($state.active.started) } catch { }
+    $startedRaw = $state.active.started
+    if ($startedRaw -is [DateTimeOffset]) { $started = $startedRaw }
+    elseif ($startedRaw -is [DateTime])   { $started = [DateTimeOffset]$startedRaw }
+    elseif ($startedRaw) {
+        try { $started = [DateTimeOffset]::Parse($startedRaw, [System.Globalization.CultureInfo]::InvariantCulture) } catch { }
+    }
     $finished = [DateTimeOffset]::UtcNow
     $durationS = if ($started) { [int]($finished - $started).TotalSeconds } else { $null }
 
