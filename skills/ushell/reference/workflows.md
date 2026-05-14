@@ -465,7 +465,12 @@ GOAL: Custom UAT BuildCookRun invocation (shipping pipeline, custom flags, etc.)
 Terminal: .uat BuildCookRun -- <BCR args>
   Preconditions:
     [A] UAT compiled and runnable
-        → .uat itself auto-builds UAT via BuildUAT.bat (no separate step needed)
+        Source-build engine (BuildUAT.bat present at <branch>\Engine\Build\BatchFiles\):
+        → .uat itself auto-builds UAT via BuildUAT.bat (no separate step needed).
+        Installed engine (<branch>\Engine\Build\InstalledBuild.txt present;
+                          BuildUAT.bat stripped because UAT ships precompiled):
+        → .uat is BROKEN. ushell's cmds/uat.py:108 unconditionally invokes
+          BuildUAT.bat. Fall back to DAG #13b (RunUAT.bat direct).
     [B] Source synced if you're targeting a specific CL
         → .p4 sync <C>
 
@@ -489,6 +494,63 @@ Skip-conditions: BCR is itself non-idempotent in general; rely on -skipbuild /
 **Append for CI:** `-buildmachine -CrashForUAT -NoCodeSign -nosound -stdlog`.
 
 **For multi-target (client + server):** `-target=MyGame+MyGameServer -platform=Win64 -serverplatform=Linux -clientconfig=Shipping -serverconfig=Shipping`. (Split into two `.uat BuildCookRun` calls is often cleaner for CI archiving.)
+
+---
+
+## 13b. Shipping build via raw `RunUAT.bat` (installed-engine fallback)
+
+```
+GOAL: Same as #13 (custom UAT BuildCookRun) but the engine is an installed build —
+      `<branch>\Engine\Build\InstalledBuild.txt` is present and `BuildUAT.bat` is
+      stripped — so ushell's `.uat` channel fails at its precompile preamble.
+
+Terminal: <branch>\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun <BCR args>
+  Preconditions:
+    [A] RunUAT.bat present at <branch>\Engine\Build\BatchFiles\RunUAT.bat
+        → installed engines DO ship this; UAT comes precompiled, RunUAT just dispatches.
+    [B] -ScriptsForProject=<uproject> set so UAT picks up the project's UAT scripts
+        → replaces the ushell session-noticeboard active-project state we'd normally rely on.
+    [C] Editor build target compiled (only if the cook step needs a project-specific
+        editor module, e.g. LyraEditor) — drive this through ushell since `.build` works
+        on installed engines:
+        → cmd.exe /d /s /c "call <ushell.bat> --project=<uproject> && .build editor"
+
+Post: Cooked + staged + paked + archived build at <archivedirectory>\Windows\<Name>.exe
+      (or whatever -archivedirectory points at).
+
+Skip-conditions: same as #13 — `-skipbuild` / `-skipcook` / `-skipstage` / `-skiparchive`.
+
+Verification of installed-engine state:
+  • <branch>\Engine\Build\InstalledBuild.txt exists.
+  • <branch>\Engine\Build\BatchFiles\BuildUAT.* DOES NOT exist (only RunUAT.{bat,command,sh}).
+  • UBT printed `Program targets are not currently supported from this engine distribution`
+    on the most recent `.sln generate`.
+```
+
+**Canonical shipping invocation (installed-engine variant):**
+
+```powershell
+<branch>\Engine\Build\BatchFiles\RunUAT.bat BuildCookRun `
+  -ScriptsForProject=<full path>\MyGame.uproject `
+  -project=<full path>\MyGame.uproject `
+  -target=MyGame -platform=Win64 -clientconfig=Shipping `
+  -build -cook -stage -pak -iostore -compressed -package -archive `
+  -archivedirectory="<full path>\Out" `
+  -prereqs -nodebuginfo -utf8output -unattended -nop4
+```
+
+**Why this is allowed under iron rule #1:** the rule says "drive build infrastructure through ushell — no silent fallback." On installed engines, `.uat` is *genuinely broken at the source level* (ushell's `cmds/uat.py:108` unconditionally calls a stripped script). RunUAT.bat is the **documented, explicit** carve-out — see SKILL.md iron rule #1 and `reference/troubleshooting.md` (`.uat *` fails with `[WinError 2]`). This is not a silent fallback; it is the prescribed workaround.
+
+**Other UAT-wrappers that need the same fallback on installed engines:**
+
+| ushell verb | Installed-engine equivalent |
+|---|---|
+| `.uat <Command> -- <args>` | `RunUAT.bat <Command> -ScriptsForProject=<uproject> <args>` |
+| `.stage <target> <platform> <style>` | `RunUAT.bat BuildCookRun -ScriptsForProject=<uproject> -project=<uproject> -target=<...> -platform=<...> -clientconfig=<...> -skipbuild -skipcook -stage [-pak] [-iostore]` |
+| `.deploy <target> <platform>` | `RunUAT.bat BuildCookRun -ScriptsForProject=<uproject> -project=<uproject> ... -skipbuild -skipcook -skipstage -deploy` |
+| `.perf test <subtest> <P>` | `RunUAT.bat RunUnreal -ScriptsForProject=<uproject> -test=AutomatedPerfTest.<SubtestClass> ...` (see `reference/uat.md` §4) |
+
+**What still works through ushell on installed engines** (the verbs that don't touch UAT — UBT or stand-alone Python only): `.info`, `.project`, `.sln generate`, `.sln open`, `.build editor`, `.build {game|client|server} <P> [<variant>]`, `.build program`, `.run *`, `.cook game/client/server`, `.cook odsc`, `.p4 *`, `.zen *`, `.ddc auth`, `.kill *`, `.getbuild`, `.notify`. Prefer these for everything except the four UAT-dependent verbs above.
 
 ---
 
